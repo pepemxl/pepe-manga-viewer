@@ -33,6 +33,7 @@ app.include_router(settings.router)
 def on_startup() -> None:
     wait_for_db()
     Base.metadata.create_all(engine)
+    _migrate()
 
     if os.getenv("SEED_SAMPLE", "0") == "1":
         from . import models, seed
@@ -47,6 +48,21 @@ def on_startup() -> None:
                 log.info("Skipping seed — %d series already present.", count)
         finally:
             db.close()
+
+
+def _migrate() -> None:
+    """Idempotent column adds — runs on every startup so old DBs catch up."""
+    statements = [
+        "ALTER TABLE series ADD COLUMN reading_mode VARCHAR(20) NULL",
+        "ALTER TABLE series ADD COLUMN fit VARCHAR(20) NULL",
+    ]
+    with engine.begin() as conn:
+        for stmt in statements:
+            try:
+                conn.exec_driver_sql(stmt)
+                log.info("applied: %s", stmt)
+            except Exception:
+                pass  # column already present
 
 
 @app.get("/")

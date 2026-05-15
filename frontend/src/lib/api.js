@@ -23,6 +23,7 @@ export const api = {
   sources:  () => req('GET', '/api/library/sources'),
   series:   (id) => req('GET', `/api/series/${id}`),
   setShelf: (id, shelf) => req('PATCH', `/api/series/${id}/shelf`, { shelf }),
+  setReaderConfig: (id, cfg) => req('PATCH', `/api/series/${id}/reader-config`, cfg),
   chapter:  (id) => req('GET', `/api/chapters/${id}`),
   progress: (id, page, finished) =>
     req('POST', `/api/chapters/${id}/progress`, { chapter_id: id, page, finished }),

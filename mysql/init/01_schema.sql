@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS series (
   description  TEXT NULL,
   kind         VARCHAR(40)  NOT NULL DEFAULT 'manga',
   direction    VARCHAR(10)  NOT NULL DEFAULT 'LTR',
+  reading_mode VARCHAR(20)  NULL,
+  fit          VARCHAR(20)  NULL,
   source_id    INT NULL,
   source_path  VARCHAR(512) NULL,
   cover_url    VARCHAR(512) NULL,

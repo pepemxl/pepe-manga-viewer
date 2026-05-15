@@ -48,3 +48,28 @@ def set_shelf(series_id: int, body: dict, db: Session = Depends(get_db)):
     s.shelf = body.get("shelf", s.shelf)
     db.commit()
     return {"ok": True, "shelf": s.shelf}
+
+
+ALLOWED_MODES = {"single", "double", "vertical", "horizontal"}
+ALLOWED_DIRS  = {"LTR", "RTL", "vert"}
+ALLOWED_FITS  = {"width", "height", "original", "smart"}
+
+
+@router.patch("/{series_id}/reader-config")
+def set_reader_config(series_id: int, body: dict, db: Session = Depends(get_db)):
+    s = db.query(models.Series).get(series_id)
+    if not s:
+        raise HTTPException(404)
+    if "reading_mode" in body and body["reading_mode"] in ALLOWED_MODES:
+        s.reading_mode = body["reading_mode"]
+    if "direction" in body and body["direction"] in ALLOWED_DIRS:
+        s.direction = body["direction"]
+    if "fit" in body and body["fit"] in ALLOWED_FITS:
+        s.fit = body["fit"]
+    db.commit()
+    return {
+        "ok": True,
+        "reading_mode": s.reading_mode,
+        "direction": s.direction,
+        "fit": s.fit,
+    }

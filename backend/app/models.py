@@ -33,6 +33,8 @@ class Series(Base):
     description = Column(Text, nullable=True)
     kind = Column(String(40), nullable=False, default="manga")
     direction = Column(String(10), nullable=False, default="LTR")
+    reading_mode = Column(String(20), nullable=True)
+    fit = Column(String(20), nullable=True)
     source_id = Column(Integer, ForeignKey("sources.id"), nullable=True)
     source_path = Column(String(512), nullable=True)
     cover_url = Column(String(512), nullable=True)

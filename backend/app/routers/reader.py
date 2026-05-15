@@ -22,6 +22,8 @@ def chapter_info(chapter_id: int, db: Session = Depends(get_db)):
         "current_page": p.page if p else 1,
         "direction": s.direction if s else "LTR",
         "kind": s.kind if s else "manga",
+        "reading_mode": s.reading_mode if s else None,
+        "fit": s.fit if s else None,
     }
 
 

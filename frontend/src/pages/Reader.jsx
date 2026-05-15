@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { Chip, Icon, Note } from '../components/Sketch.jsx';
 import { api } from '../lib/api.js';
+import { useSettings } from '../lib/settings.jsx';
 
 const MODES = ['single', 'double', 'vertical', 'horizontal'];
 
@@ -11,6 +12,7 @@ function nextMode(m) { return MODES[(MODES.indexOf(m) + 1) % MODES.length]; }
 export default function Reader() {
   const { chId } = useParams();
   const nav = useNavigate();
+  const { settings } = useSettings();
 
   const [ch,         setCh]         = useState(null);
   const [neighbors,  setNeighbors]  = useState({ prev: null, next: null, index: 0, total: 0 });
@@ -23,6 +25,9 @@ export default function Reader() {
 
   const idleTimer = useRef(null);
   const stageRef  = useRef(null);
+  // Suppress the first config-save after a chapter loads, since the values
+  // we just applied came *from* the server — nothing to persist back.
+  const skipNextCfgSave = useRef(false);
 
   // load chapter
   useEffect(() => {
@@ -32,17 +37,50 @@ export default function Reader() {
       if (cancel) return;
       setCh(info);
       setPage(Math.max(1, info.current_page || 1));
-      if (info.direction === 'vert' || info.kind === 'manhwa') {
-        setMode('vertical');
-        setDir('LTR');
-      } else if (info.direction) {
-        setDir(info.direction);
-      }
+
+      // Reading mode cascade: series-specific → kind heuristic → global default.
+      const seriesMode = info.reading_mode
+        || ((info.direction === 'vert' || info.kind === 'manhwa') ? 'vertical' : null);
+      const resolvedMode = seriesMode
+        || settings.reading_mode_default
+        || 'single';
+
+      // Direction: series direction wins (treat "vert" as LTR for horizontal navigation);
+      // otherwise fall back to the global default.
+      const resolvedDir = info.direction && info.direction !== 'vert'
+        ? info.direction
+        : (settings.direction_default || 'LTR');
+
+      // Fit: series-specific → global default.
+      const resolvedFit = info.fit || settings.fit_default || 'height';
+
+      skipNextCfgSave.current = true;
+      setMode(resolvedMode);
+      setDir(resolvedDir);
+      setFit(resolvedFit);
+
       const nb = await api.neighbors(info.series_id, info.id);
       if (!cancel) setNeighbors(nb);
     })().catch(console.error);
     return () => { cancel = true; };
-  }, [chId]);
+  }, [chId, settings.reading_mode_default, settings.direction_default, settings.fit_default]);
+
+  // persist per-series reader config when the user changes mode/dir/fit (debounced)
+  const cfgTimer = useRef(null);
+  useEffect(() => {
+    if (!ch) return;
+    if (skipNextCfgSave.current) {
+      skipNextCfgSave.current = false;
+      return;
+    }
+    clearTimeout(cfgTimer.current);
+    cfgTimer.current = setTimeout(() => {
+      api.setReaderConfig(ch.series_id, {
+        reading_mode: mode, direction: dir, fit,
+      }).catch(() => {});
+    }, 400);
+    return () => clearTimeout(cfgTimer.current);
+  }, [ch, mode, dir, fit]);
 
   // server-side persist on page change (debounced)
   const persistRef = useRef(null);
