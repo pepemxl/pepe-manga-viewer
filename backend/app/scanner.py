@@ -20,6 +20,71 @@ DOC_EXTS = {".pdf", ".epub"}
 
 CHAPTER_NUM_RE = re.compile(r"(?:ch(?:apter)?[\s._-]*)?(\d+(?:\.\d+)?)", re.IGNORECASE)
 
+# Prioritized patterns for "this is the chapter number" — tried in order, first hit wins.
+# Each pattern captures the chapter number in group(1).
+_NUM = r"(\d{1,4}(?:\.\d{1,3})?)"
+_CHAPTER_PATTERNS = [
+    # explicit chapter markers (highest confidence)
+    re.compile(rf"\bch(?:apter|apt|p)?[\s._\-#]*{_NUM}\b", re.IGNORECASE),
+    re.compile(rf"\bc[\s._\-#]?{_NUM}\b",                  re.IGNORECASE),
+    re.compile(rf"\bep(?:isode)?[\s._\-#]*{_NUM}\b",       re.IGNORECASE),
+    re.compile(rf"\bep?[\s._\-#]?{_NUM}\b",                re.IGNORECASE),
+    # volume+chapter combos like v01c05 / v1_ch5 — take the chapter part
+    re.compile(rf"\bv\d+[\s._\-]*(?:c|ch|chapter)[\s._\-]*{_NUM}\b", re.IGNORECASE),
+    # "#5" / "# 5"
+    re.compile(rf"#\s*{_NUM}\b"),
+    # CJK markers — 第N話 / N話 / N화
+    re.compile(rf"(?:第)?{_NUM}\s*(?:話|话|화|回)"),
+]
+# strip these tokens before the "last standalone number" fallback, so they
+# don't shadow the real chapter number (e.g. "[Group17] Series 2020 - 05.cbz")
+_NOISE_PATTERNS = [
+    re.compile(r"\[[^\]]*\]"),                          # [Scanlator]
+    re.compile(r"\([^\)]*\)"),                          # (v01) / (1080p)
+    re.compile(r"\b(19|20)\d{2}\b"),                    # years
+    re.compile(r"\bv(?:ol(?:ume)?)?[\s._\-#]*\d+\b", re.IGNORECASE),  # volume tags
+    re.compile(r"\b(?:1080p|720p|480p|2160p|hd|hq|sd)\b", re.IGNORECASE),
+]
+_TRAILING_TOKENS = re.compile(r"\b\d{1,4}(?:\.\d{1,3})?\b")
+
+
+def parse_chapter_number(name: str) -> tuple[float | None, str | None]:
+    """Detect a chapter number in `name` (filename or folder name).
+
+    Returns ``(number, title)`` where ``number`` is a float for sorting and
+    ``title`` is the leftover descriptive portion (or None).
+    """
+    base = Path(name).stem
+    # try the explicit, high-confidence patterns first
+    for pat in _CHAPTER_PATTERNS:
+        m = pat.search(base)
+        if m:
+            try:
+                num = float(m.group(1))
+                title = (base[:m.start()] + " " + base[m.end():]).strip(" _-.")
+                title = re.sub(r"[\s_\-]+", " ", title).strip(" -·.")
+                return num, (title or None)
+            except ValueError:
+                continue
+
+    # fallback: strip noise (scanlator tags, volume, years) and take the LAST
+    # remaining standalone number — that's almost always the chapter number.
+    scrubbed = base
+    for pat in _NOISE_PATTERNS:
+        scrubbed = pat.sub(" ", scrubbed)
+    nums = list(_TRAILING_TOKENS.finditer(scrubbed))
+    if nums:
+        m = nums[-1]
+        try:
+            num = float(m.group(0))
+            title = (scrubbed[:m.start()] + " " + scrubbed[m.end():]).strip(" _-.")
+            title = re.sub(r"[\s_\-]+", " ", title).strip(" -·.")
+            return num, (title or None)
+        except ValueError:
+            pass
+
+    return None, None
+
 
 @dataclass
 class ChapterInfo:
@@ -41,12 +106,9 @@ class SeriesInfo:
 
 def _natural_key(name: str) -> tuple[int, float, str]:
     """Sort chapter folders/files numerically when possible."""
-    m = CHAPTER_NUM_RE.search(name)
-    if m:
-        try:
-            return (0, float(m.group(1)), name.lower())
-        except ValueError:
-            pass
+    num, _ = parse_chapter_number(name)
+    if num is not None:
+        return (0, num, name.lower())
     return (1, 0.0, name.lower())
 
 
@@ -68,17 +130,18 @@ def _count_images_in_folder(folder: Path) -> int:
     )
 
 
+def _format_label(num: float) -> str:
+    # render whole numbers as "Ch. 5", decimals as "Ch. 5.5"
+    return f"Ch. {num:g}"
+
+
 def _chapter_label_from_name(name: str, idx: int) -> tuple[str, float, str | None]:
     base = Path(name).stem
-    m = CHAPTER_NUM_RE.search(base)
-    if m:
-        num = m.group(1)
-        sort = float(num)
-        # try to grab a title portion after the number
-        after = base[m.end():].strip(" _-.")
-        title = after.replace("_", " ").replace("-", " ").strip() or None
-        return (f"Ch. {num}", sort, title)
-    return (f"Ch. {idx + 1}", float(idx + 1), base.replace("_", " ").strip() or None)
+    num, title = parse_chapter_number(base)
+    if num is not None:
+        return (_format_label(num), num, title)
+    fallback = base.replace("_", " ").replace("-", " ").strip() or None
+    return (_format_label(float(idx + 1)), float(idx + 1), fallback)
 
 
 def discover(root: Path) -> list[SeriesInfo]:
@@ -201,6 +264,35 @@ def commit(db: Session, root_path: str, items_filter: Iterable[str] | None = Non
 
     db.commit()
     return {"series": added_series, "chapters": added_chapters}
+
+
+def redetect_series_chapter_numbers(db: Session, series_id: int) -> dict:
+    """Re-run the chapter-number detector against each chapter's stored
+    source_path. Updates ``number`` / ``number_sort`` / ``title`` when the new
+    parse yields a number; leaves the row untouched otherwise. Useful after
+    the detector has been improved without rescanning the filesystem."""
+    chapters = db.query(models.Chapter).filter_by(series_id=series_id).all()
+    if not chapters:
+        return {"checked": 0, "updated": 0}
+
+    updated = 0
+    for c in chapters:
+        ref = c.source_path or c.number or ""
+        # use the filename component, not the full path
+        name = Path(ref).name if ref else ""
+        num, title = parse_chapter_number(name)
+        if num is None:
+            continue
+        new_number = _format_label(num)
+        if (c.number != new_number) or (float(c.number_sort or 0) != num):
+            c.number = new_number
+            c.number_sort = num
+            if title and not c.title:
+                c.title = title
+            updated += 1
+    if updated:
+        db.commit()
+    return {"checked": len(chapters), "updated": updated}
 
 
 # ── page reading ────────────────────────────────────────────────────────────

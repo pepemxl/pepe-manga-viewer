@@ -37,6 +37,7 @@ export const api = {
   series:   (id) => req('GET', `/api/series/${id}`),
   setShelf: (id, shelf) => req('PATCH', `/api/series/${id}/shelf`, { shelf }),
   setReaderConfig: (id, cfg) => req('PATCH', `/api/series/${id}/reader-config`, cfg),
+  redetectChapters: (id) => req('POST', `/api/series/${id}/redetect-chapters`),
   chapter:  (id) => req('GET', `/api/chapters/${id}`),
   progress: (id, page, finished) =>
     req('POST', `/api/chapters/${id}/progress`, { chapter_id: id, page, finished }),

@@ -11,13 +11,13 @@ export const Cover = ({ title, tag, w, h, progress, style, src, hideTitle }) => 
   </div>
 );
 
-export const Btn = ({ children, primary, accent, small, onClick, style, type = 'button', disabled }) => {
+export const Btn = ({ children, primary, accent, small, onClick, style, type = 'button', disabled, title }) => {
   const cls = ['sk-btn'];
   if (primary) cls.push('sk-btn-primary');
   if (accent)  cls.push('sk-btn-accent');
   if (small)   cls.push('sk-btn-small');
   return (
-    <button className={cls.join(' ')} onClick={onClick} style={style} type={type} disabled={disabled}>
+    <button className={cls.join(' ')} onClick={onClick} style={style} type={type} disabled={disabled} title={title}>
       {children}
     </button>
   );

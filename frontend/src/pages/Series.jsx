@@ -49,11 +49,29 @@ export default function Series() {
   const [s, setS] = useState(null);
   const [filter, setFilter] = useState('all');
   const [allCollections, setAllCollections] = useState([]);
+  const [redetecting, setRedetecting] = useState(false);
+  const [toast, setToast] = useState('');
 
   const refresh = () => api.series(id).then(setS).catch(console.error);
   const refreshCollections = () => api.collections().then(r => setAllCollections(r.items)).catch(() => {});
 
   useEffect(() => { refresh(); refreshCollections(); }, [id]);
+
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 1800); };
+
+  const redetectChapters = async () => {
+    if (redetecting) return;
+    setRedetecting(true);
+    try {
+      const r = await api.redetectChapters(id);
+      flash(`re-detected · ${r.updated}/${r.checked} updated`);
+      if (r.updated) await refresh();
+    } catch (e) {
+      flash(`re-detect failed: ${e.message || e}`);
+    } finally {
+      setRedetecting(false);
+    }
+  };
 
   const toggleCollection = async (coll) => {
     if (!s) return;
@@ -65,11 +83,14 @@ export default function Series() {
 
   if (!s) return <div className="app-shell"><AppBar /><div style={{ padding: 40 }}>loading…</div></div>;
 
-  const sorted = [...s.chapters].sort((a, b) => {
-    const an = parseFloat(a.number.replace(/[^\d.]/g, '')) || 0;
-    const bn = parseFloat(b.number.replace(/[^\d.]/g, '')) || 0;
-    return bn - an;
-  });
+  // Sort by the numeric chapter key the backend computed (number_sort),
+  // falling back to parsing the rendered number for older payloads.
+  const chapterKey = (c) => {
+    if (typeof c.number_sort === 'number') return c.number_sort;
+    const n = parseFloat(String(c.number || '').replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const sorted = [...s.chapters].sort((a, b) => chapterKey(b) - chapterKey(a));
   const filtered = filter === 'unread'
     ? sorted.filter(c => !c.finished)
     : filter === 'bookmarked'
@@ -164,6 +185,10 @@ export default function Series() {
             <Chip on={filter === 'all'}        onClick={() => setFilter('all')}>all</Chip>
             <Chip on={filter === 'unread'}     onClick={() => setFilter('unread')}>unread</Chip>
             <Chip on={filter === 'bookmarked'} onClick={() => setFilter('bookmarked')}>bookmarked</Chip>
+            <Btn small onClick={redetectChapters} disabled={redetecting}
+                 title="re-parse chapter numbers from each chapter's filename">
+              {redetecting ? '…' : '↻ re-detect #'}
+            </Btn>
             <span className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>↓ newest first</span>
           </div>
 
@@ -177,6 +202,7 @@ export default function Series() {
           </div>
         </div>
       </div>
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
