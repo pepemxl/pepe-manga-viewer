@@ -410,13 +410,26 @@ body.theme-oled {
   --accent-soft:#3a1f18;
 }
 
+body.theme-noir {
+  --ink:        #e0e0e0;
+  --ink2:       #c0c0c0;
+  --muted:      #a0a0a0;
+  --faint:      #2e2e2e;
+  --paper:      #0f0f0f;
+  --panel:      #1e1e1e;
+  --accent:     #ff3b3b;
+  --accent-soft:#4a1212;
+}
+
 /* Dark themes need a couple of element-level nudges since the wireframe was
    designed on paper. */
 body.theme-dark .sk-cover img,
-body.theme-oled .sk-cover img { filter: brightness(0.85); }
+body.theme-oled .sk-cover img,
+body.theme-noir .sk-cover img { filter: brightness(0.85); }
 
 body.theme-dark .appbar-search input,
-body.theme-oled .appbar-search input { color: var(--ink); }
+body.theme-oled .appbar-search input,
+body.theme-noir .appbar-search input { color: var(--ink); }
 
 /* ── Reduce motion ──────────────────────────────────────────────────── */
 body.reduce-motion *,

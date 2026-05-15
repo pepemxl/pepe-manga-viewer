@@ -135,10 +135,11 @@ function ReaderPane({ s, save }) {
 
 function AppearancePane({ s, save }) {
   const themes = [
-    ['light', 'var(--paper)',  'var(--ink)'],
-    ['sepia', '#f4e9d2',       '#3a2c18'],
-    ['dark',  '#191815',       '#e6e2d8'],
-    ['oled',  '#000',          '#cfcabc'],
+    ['light', '#fbf8f1', '#1a1816', '#c96442'],
+    ['sepia', '#f4e9d2', '#3a2c18', '#b85a38'],
+    ['dark',  '#191815', '#e6e2d8', '#d97a58'],
+    ['oled',  '#000000', '#cfcabc', '#d97a58'],
+    ['noir',  '#0f0f0f', '#e0e0e0', '#ff3b3b'],
   ];
   const theme = s.theme || 'light';
   return (
@@ -148,12 +149,12 @@ function AppearancePane({ s, save }) {
         Pick a theme. Reader uses dark by default for OLED comfort.
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
-        {themes.map(([n, bg, fg]) => (
+        {themes.map(([n, bg, fg, ac]) => (
           <div
             key={n}
             onClick={() => save('theme', n)}
             style={{
-              flex: 1, border: `1.5px solid ${theme === n ? 'var(--accent)' : 'var(--ink)'}`,
+              flex: 1, border: `1.5px solid ${theme === n ? ac : 'var(--ink)'}`,
               borderRadius: 4, background: bg, color: fg, padding: 12, cursor: 'pointer',
               minHeight: 80, position: 'relative',
             }}
@@ -161,7 +162,12 @@ function AppearancePane({ s, save }) {
             <div style={{ fontFamily: 'var(--hand)', fontSize: 16, fontWeight: 700 }}>{n}</div>
             <div className="sk-line" style={{ width: '70%', marginTop: 8, background: fg, opacity: .5 }} />
             <div className="sk-line" style={{ width: '50%', marginTop: 4, background: fg, opacity: .5 }} />
-            {theme === n && <div style={{ position: 'absolute', top: 6, right: 8, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)' }}>✓</div>}
+            <span style={{
+              position: 'absolute', bottom: 8, right: 8,
+              width: 14, height: 14, borderRadius: '50%',
+              background: ac, border: `1.5px solid ${fg}`,
+            }} />
+            {theme === n && <div style={{ position: 'absolute', top: 6, right: 8, fontFamily: 'var(--mono)', fontSize: 10, color: ac }}>✓</div>}
           </div>
         ))}
       </div>

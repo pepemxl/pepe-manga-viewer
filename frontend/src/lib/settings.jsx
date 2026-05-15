@@ -15,7 +15,7 @@ const DEFAULTS = {
   cover_progress: '1',
 };
 
-const THEMES = ['light', 'sepia', 'dark', 'oled'];
+const THEMES = ['light', 'sepia', 'dark', 'oled', 'noir'];
 
 function applyToBody(s) {
   const body = document.body;
