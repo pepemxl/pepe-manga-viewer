@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import OperationalError
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", "mysql+pymysql://kuro:kuropass@mysql:3306/kuro"
+    "DATABASE_URL", "mysql+pymysql://pepe-manga:pepe-mangapass@mysql:3306/pepe-manga"
 )
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=280)

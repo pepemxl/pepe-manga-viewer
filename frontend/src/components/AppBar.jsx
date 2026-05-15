@@ -17,7 +17,7 @@ export default function AppBar({ search = true }) {
   return (
     <header className="appbar">
       <Link to="/" className="appbar-logo">
-        <span className="dot">◐</span> kuro<span className="suffix">.read</span>
+        <span className="dot">◐</span> pepe-manga<span className="suffix">.read</span>
       </Link>
       <nav className="appbar-nav">
         {NAV.map(n => (

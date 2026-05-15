@@ -1,4 +1,4 @@
-# kuro.read
+# pepe-manga.read
 
 Desktop manga / manhwa / comic / book reader. Built from Claude Design wireframes — hand-sketched aesthetic, Architects Daughter + IBM Plex Mono fonts, warm rust accent.
 

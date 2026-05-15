@@ -259,7 +259,7 @@ function StoragePane() {
 function AboutPane() {
   return (
     <div>
-      <h2 style={{ fontFamily: 'var(--hand)', fontSize: 28, fontWeight: 700, margin: 0 }}>kuro.read</h2>
+      <h2 style={{ fontFamily: 'var(--hand)', fontSize: 28, fontWeight: 700, margin: 0 }}>pepe-manga.read</h2>
       <div style={{ fontFamily: 'var(--hand)', fontSize: 16, marginTop: 10 }}>
         Built from Claude Design wireframes. Vite + React frontend, FastAPI backend, MySQL.
       </div>

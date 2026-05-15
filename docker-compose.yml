@@ -1,33 +1,33 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: kuro-mysql
+    container_name: pepe-manga-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: kuroroot
-      MYSQL_DATABASE: kuro
-      MYSQL_USER: kuro
-      MYSQL_PASSWORD: kuropass
+      MYSQL_ROOT_PASSWORD: pepe-mangaroot
+      MYSQL_DATABASE: pepe-manga
+      MYSQL_USER: pepe-manga
+      MYSQL_PASSWORD: pepe-mangapass
     ports:
       - "8203:3306"
     volumes:
-      - kuro-mysql-data:/var/lib/mysql
+      - pepe-manga-mysql-data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukuro", "-pkuropass"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-upepe-manga", "-ppepe-mangapass"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   backend:
     build: ./backend
-    container_name: kuro-backend
+    container_name: pepe-manga-backend
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql+pymysql://kuro:kuropass@mysql:3306/kuro
+      DATABASE_URL: mysql+pymysql://pepe-manga:pepe-mangapass@mysql:3306/pepe-manga
       MANGA_ROOT: /manga
       SEED_SAMPLE: "1"
     ports:
@@ -38,7 +38,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: kuro-frontend
+    container_name: pepe-manga-frontend
     restart: unless-stopped
     depends_on:
       - backend
@@ -51,4 +51,4 @@ services:
       - ./frontend/index.html:/app/index.html:ro
 
 volumes:
-  kuro-mysql-data:
+  pepe-manga-mysql-data:

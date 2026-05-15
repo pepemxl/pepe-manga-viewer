@@ -1,4 +1,4 @@
-# kuro.read — common dev workflows.
+# pepe-manga.read — common dev workflows.
 # `make help` lists everything.
 
 SHELL := /bin/bash
@@ -8,9 +8,9 @@ BACKEND_SVC   := backend
 FRONTEND_SVC  := frontend
 DB_SVC        := mysql
 
-DB_USER       := kuro
-DB_PASS       := kuropass
-DB_NAME       := kuro
+DB_USER       := pepe-manga
+DB_PASS       := pepe-mangapass
+DB_NAME       := pepe-manga
 
 # ── meta ─────────────────────────────────────────────────────────────────
 .PHONY: help
@@ -69,7 +69,7 @@ sh-frontend:   ## sh inside frontend (alpine)
 sh-db:         ## bash inside mysql
 	$(COMPOSE) exec $(DB_SVC) /bin/bash
 
-mysql:         ## mysql client connected to the kuro database
+mysql:         ## mysql client connected to the pepe-manga database
 	$(COMPOSE) exec $(DB_SVC) mysql -u$(DB_USER) -p$(DB_PASS) $(DB_NAME)
 
 # ── data ─────────────────────────────────────────────────────────────────
@@ -91,8 +91,8 @@ reseed:        ## drop all series/progress + re-seed sample data (DESTRUCTIVE)
 
 db-reset:      ## wipe the mysql volume (DESTRUCTIVE — full data loss)
 	$(COMPOSE) down
-	docker volume rm pepe-manga-viewer_kuro-mysql-data 2>/dev/null || \
-	  docker volume rm $$(basename $$PWD)_kuro-mysql-data 2>/dev/null || true
+	docker volume rm pepe-manga-viewer_pepe-manga-mysql-data 2>/dev/null || \
+	  docker volume rm $$(basename $$PWD)_pepe-manga-mysql-data 2>/dev/null || true
 	$(COMPOSE) up -d --build
 
 clean:         ## stop services + remove containers

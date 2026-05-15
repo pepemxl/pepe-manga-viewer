@@ -8,9 +8,9 @@ from .database import Base, engine, wait_for_db, SessionLocal
 from .routers import series, chapters, reader, library, importing, dashboard, settings
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("kuro")
+log = logging.getLogger("pepe-manga")
 
-app = FastAPI(title="kuro.read API", version="0.1.0")
+app = FastAPI(title="pepe-manga.read API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +51,7 @@ def on_startup() -> None:
 
 @app.get("/")
 def root():
-    return {"app": "kuro.read", "ok": True}
+    return {"app": "pepe-manga.read", "ok": True}
 
 
 @app.get("/health")
