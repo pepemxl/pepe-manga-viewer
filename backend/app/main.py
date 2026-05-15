@@ -55,6 +55,7 @@ def _migrate() -> None:
     statements = [
         "ALTER TABLE series ADD COLUMN reading_mode VARCHAR(20) NULL",
         "ALTER TABLE series ADD COLUMN fit VARCHAR(20) NULL",
+        "ALTER TABLE series ADD COLUMN zoom DECIMAL(4,2) NULL",
         (
             "CREATE TABLE IF NOT EXISTS series_collections ("
             "  series_id INT NOT NULL,"

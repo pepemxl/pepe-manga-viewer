@@ -406,6 +406,8 @@ function ShortcutsPane() {
     ['F',              'toggle fullscreen'],
     ['B',              'bookmark current page'],
     ['M',              'cycle reading mode'],
+    ['+ / −',          'zoom in / zoom out (remembered per series)'],
+    ['0',              'reset zoom to 100%'],
     ['G',              'go to page…'],
     ['Esc',            'back to series'],
   ];
@@ -443,8 +445,8 @@ function StoragePane() {
 function AboutPane() {
   const features = [
     ['▥', 'Library',    'Sidebar shelves + cover grid. Filter, search, and hide finished series.'],
-    ['▣', 'Reader',     'Four modes — single, double, horizontal & vertical continuous. RTL/LTR, fit width/height/original, click zones, fullscreen.'],
-    ['▤', 'Series',     'Cover, metadata, and chapter list. Per-series overrides for reading mode and direction.'],
+    ['▣', 'Reader',     'Four modes — single, double, horizontal & vertical continuous. RTL/LTR, fit width/height/original, zoom (+/−/0), click zones, fullscreen.'],
+    ['▤', 'Series',     'Cover, metadata, and chapter list. Per-series overrides for reading mode, direction, fit, and zoom level.'],
     ['📁', 'Sources',   'Mount any host folder as a watched source. Scan turns subfolders or .cbz / .cbr files into series.'],
     ['◐', 'Themes',     'Five themes — light, sepia, dark, oled, noir. Reduce-motion and cover-progress toggles.'],
     ['⌘', 'Shortcuts',  'Keyboard-first: pages, chapters, bookmarks, page-jump, mode cycle, fullscreen.'],

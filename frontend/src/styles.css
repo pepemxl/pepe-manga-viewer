@@ -292,6 +292,17 @@ button { font: inherit; cursor: pointer; }
   display: flex; align-items: center; gap: 14px;
   padding: 10px 16px; z-index: 5;
   transition: opacity .2s, transform .2s;
+  /* Chrome bars use the light paper background regardless of the active theme,
+     so pin the *full* palette to the light-theme values. Otherwise chips,
+     icons, and the zoom % label render dark-on-dark in dark/oled/noir. */
+  --ink:         #1a1816;
+  --ink2:        #3a3633;
+  --muted:       #88827b;
+  --faint:       #c8c2b8;
+  --paper:       #fbf8f1;
+  --panel:       #f2eee5;
+  --accent-soft: #f6dccf;
+  color: var(--ink);
 }
 .reader-chrome-top {
   top: 0; border-bottom: 1.5px solid var(--ink);

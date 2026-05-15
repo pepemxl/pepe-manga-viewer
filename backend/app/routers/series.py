@@ -56,6 +56,7 @@ def set_shelf(series_id: int, body: dict, db: Session = Depends(get_db)):
 ALLOWED_MODES = {"single", "double", "vertical", "horizontal"}
 ALLOWED_DIRS  = {"LTR", "RTL", "vert"}
 ALLOWED_FITS  = {"width", "height", "original", "smart"}
+ZOOM_MIN, ZOOM_MAX = 0.25, 4.0
 
 
 @router.patch("/{series_id}/reader-config")
@@ -69,10 +70,23 @@ def set_reader_config(series_id: int, body: dict, db: Session = Depends(get_db))
         s.direction = body["direction"]
     if "fit" in body and body["fit"] in ALLOWED_FITS:
         s.fit = body["fit"]
+    if "zoom" in body:
+        raw = body["zoom"]
+        if raw is None:
+            s.zoom = None
+        else:
+            try:
+                z = float(raw)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "zoom must be a number")
+            if not (ZOOM_MIN <= z <= ZOOM_MAX):
+                raise HTTPException(400, f"zoom out of range [{ZOOM_MIN}, {ZOOM_MAX}]")
+            s.zoom = round(z, 2)
     db.commit()
     return {
         "ok": True,
         "reading_mode": s.reading_mode,
         "direction": s.direction,
         "fit": s.fit,
+        "zoom": float(s.zoom) if s.zoom is not None else None,
     }

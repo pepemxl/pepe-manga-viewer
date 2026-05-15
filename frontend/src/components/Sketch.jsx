@@ -23,12 +23,12 @@ export const Btn = ({ children, primary, accent, small, onClick, style, type = '
   );
 };
 
-export const Chip = ({ children, on, accent, onClick }) => {
+export const Chip = ({ children, on, accent, onClick, style, title }) => {
   const cls = ['sk-chip'];
   if (on)     cls.push('sk-chip-on');
   if (accent) cls.push('sk-chip-accent');
   return (
-    <span className={cls.join(' ')} onClick={onClick}>{children}</span>
+    <span className={cls.join(' ')} onClick={onClick} style={style} title={title}>{children}</span>
   );
 };
 

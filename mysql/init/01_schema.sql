@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS series (
   direction    VARCHAR(10)  NOT NULL DEFAULT 'LTR',
   reading_mode VARCHAR(20)  NULL,
   fit          VARCHAR(20)  NULL,
+  zoom         DECIMAL(4,2) NULL,
   source_id    INT NULL,
   source_path  VARCHAR(512) NULL,
   cover_url    VARCHAR(512) NULL,
