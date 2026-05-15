@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import AppBar from '../components/AppBar.jsx';
 import { Chip, Toggle, Radio, Btn } from '../components/Sketch.jsx';
 import { api } from '../lib/api.js';
+import { useSettings } from '../lib/settings.jsx';
 
 const NAV = [
   ['reader',      'Reader',     '▣'],
@@ -23,18 +24,12 @@ const MODE_LABELS = [
 
 export default function Settings() {
   const [section, setSection] = useState('reader');
-  const [s, setS] = useState({});
   const [sources, setSources] = useState([]);
+  const { settings: s, update: save } = useSettings();
 
   useEffect(() => {
-    api.settings().then(setS).catch(console.error);
     api.sources().then(r => setSources(r.items)).catch(() => {});
   }, []);
-
-  const save = (k, v) => {
-    setS(prev => ({ ...prev, [k]: String(v) }));
-    api.setSetting(k, v).catch(console.error);
-  };
 
   return (
     <div className="app-shell">
@@ -83,7 +78,7 @@ function Row({ label, hint, children }) {
 
 function ReaderPane({ s, save }) {
   const mode = s.reading_mode_default || 'single';
-  const dir  = s.direction_default || 'RTL';
+  const dir  = s.direction_default || 'LTR';
   const fit  = s.fit_default || 'height';
   return (
     <div>

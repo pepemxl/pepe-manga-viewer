@@ -362,6 +362,70 @@ button { font: inherit; cursor: pointer; }
   box-shadow: 0 4px 18px rgba(0,0,0,.2);
 }
 
-/* ── Theme variants (settings preview only — full theming TBD) ──────── */
-body.theme-dark  { background: #191815; color: #e6e2d8; }
-body.theme-sepia { background: #f4e9d2; color: #3a2c18; }
+/* ── Themes ─────────────────────────────────────────────────────────── */
+/* Each theme overrides the design-vocabulary variables so every component
+   (covers, chips, sidebars, etc.) adapts without per-page changes. */
+
+body.theme-light {
+  --ink:        #1a1816;
+  --ink2:       #3a3633;
+  --muted:      #88827b;
+  --faint:      #c8c2b8;
+  --paper:      #fbf8f1;
+  --panel:      #f2eee5;
+  --accent:     #c96442;
+  --accent-soft:#f6dccf;
+}
+
+body.theme-sepia {
+  --ink:        #3a2c18;
+  --ink2:       #5a4828;
+  --muted:      #8a7858;
+  --faint:      #d4c8a8;
+  --paper:      #f4e9d2;
+  --panel:      #ebe0c6;
+  --accent:     #b85a38;
+  --accent-soft:#e6c8a8;
+}
+
+body.theme-dark {
+  --ink:        #e6e2d8;
+  --ink2:       #b8b3a8;
+  --muted:      #88827b;
+  --faint:      #3a3633;
+  --paper:      #191815;
+  --panel:      #221f1c;
+  --accent:     #d97a58;
+  --accent-soft:#4a2820;
+}
+
+body.theme-oled {
+  --ink:        #cfcabc;
+  --ink2:       #88827b;
+  --muted:      #5a564f;
+  --faint:      #2a2826;
+  --paper:      #000000;
+  --panel:      #0a0908;
+  --accent:     #d97a58;
+  --accent-soft:#3a1f18;
+}
+
+/* Dark themes need a couple of element-level nudges since the wireframe was
+   designed on paper. */
+body.theme-dark .sk-cover img,
+body.theme-oled .sk-cover img { filter: brightness(0.85); }
+
+body.theme-dark .appbar-search input,
+body.theme-oled .appbar-search input { color: var(--ink); }
+
+/* ── Reduce motion ──────────────────────────────────────────────────── */
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+  transition: none !important;
+  animation-duration: 0ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+/* ── Hide cover progress bars (Appearance setting) ──────────────────── */
+body.no-cover-progress .sk-cover-progress { display: none; }

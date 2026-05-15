@@ -150,7 +150,7 @@ def preview(root_path: str) -> list[dict]:
     return [{
         "name": s.name, "path": s.source_path,
         "chapter_count": len(s.chapters),
-        "format": s.format, "kind": "manga", "direction": "RTL",
+        "format": s.format, "kind": "manga", "direction": "LTR",
     } for s in items]
 
 
@@ -178,7 +178,7 @@ def commit(db: Session, root_path: str, items_filter: Iterable[str] | None = Non
         if not series:
             series = models.Series(
                 title=info.name,
-                kind="manga", direction="RTL",
+                kind="manga", direction="LTR",
                 source_id=src.id, source_path=info.source_path,
                 format=info.format, shelf="reading",
             )

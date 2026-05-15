@@ -16,7 +16,7 @@ export default function Reader() {
   const [neighbors,  setNeighbors]  = useState({ prev: null, next: null, index: 0, total: 0 });
   const [page,       setPage]       = useState(1);      // 1-indexed
   const [mode,       setMode]       = useState('single');
-  const [dir,        setDir]        = useState('RTL');
+  const [dir,        setDir]        = useState('LTR');
   const [fit,        setFit]        = useState('height');
   const [chrome,     setChrome]     = useState(true);
   const [toast,      setToast]      = useState('');
@@ -32,8 +32,12 @@ export default function Reader() {
       if (cancel) return;
       setCh(info);
       setPage(Math.max(1, info.current_page || 1));
-      if (info.direction) setDir(info.direction === 'vert' ? 'RTL' : info.direction);
-      if (info.kind === 'manhwa') setMode('vertical');
+      if (info.direction === 'vert' || info.kind === 'manhwa') {
+        setMode('vertical');
+        setDir('LTR');
+      } else if (info.direction) {
+        setDir(info.direction);
+      }
       const nb = await api.neighbors(info.series_id, info.id);
       if (!cancel) setNeighbors(nb);
     })().catch(console.error);
@@ -169,7 +173,9 @@ export default function Reader() {
             {ch.number} · {page} / {ch.page_count}
           </div>
         </div>
-        <Chip on onClick={() => setMode(nextMode)}>{mode}</Chip>
+        {MODES.map(m => (
+          <Chip key={m} on={mode === m} onClick={() => setMode(m)}>{m}</Chip>
+        ))}
         <Chip onClick={() => setDir(dir === 'RTL' ? 'LTR' : 'RTL')}>{dir}</Chip>
         <Chip onClick={() => setFit(f => f === 'width' ? 'height' : f === 'height' ? 'original' : 'width')}>fit {fit}</Chip>
         <Icon glyph="★" onClick={() => { setToast('bookmark added (mock)'); setTimeout(()=>setToast(''),1500); }} />

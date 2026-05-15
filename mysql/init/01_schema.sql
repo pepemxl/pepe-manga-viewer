@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS series (
   author       VARCHAR(255) NULL,
   description  TEXT NULL,
   kind         VARCHAR(40)  NOT NULL DEFAULT 'manga',
-  direction    VARCHAR(10)  NOT NULL DEFAULT 'RTL',
+  direction    VARCHAR(10)  NOT NULL DEFAULT 'LTR',
   source_id    INT NULL,
   source_path  VARCHAR(512) NULL,
   cover_url    VARCHAR(512) NULL,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT IGNORE INTO settings (k, v) VALUES
   ('theme', 'light'),
   ('reading_mode_default', 'single'),
-  ('direction_default', 'RTL'),
+  ('direction_default', 'LTR'),
   ('fit_default', 'height'),
   ('auto_hide_chrome', '1'),
   ('preload_next', '3'),

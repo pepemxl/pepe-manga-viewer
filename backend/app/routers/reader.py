@@ -20,7 +20,7 @@ def chapter_info(chapter_id: int, db: Session = Depends(get_db)):
         "page_count": len(pages),
         "page_urls": [f"/api/reader/page/{c.id}/{i}" for i in range(len(pages))],
         "current_page": p.page if p else 1,
-        "direction": s.direction if s else "RTL",
+        "direction": s.direction if s else "LTR",
         "kind": s.kind if s else "manga",
     }
 
