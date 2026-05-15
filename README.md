@@ -4,9 +4,9 @@ Desktop manga / manhwa / comic / book reader. Built from Claude Design wireframe
 
 ## Stack
 
-- **Frontend**: Vite + React (port 5173)
-- **Backend**: FastAPI + SQLAlchemy (port 8000)
-- **Database**: MySQL 8 (host port 3307 → container 3306)
+- **Frontend**: Vite + React — host port **8201**
+- **Backend**: FastAPI + SQLAlchemy — host port **8202**
+- **Database**: MySQL 8 — host port **8203** (→ container 3306)
 - All three orchestrated via `docker compose`.
 
 ## Run
@@ -15,7 +15,7 @@ Desktop manga / manhwa / comic / book reader. Built from Claude Design wireframe
 docker compose up --build
 ```
 
-Then open <http://localhost:5173>.
+Then open <http://localhost:8201>. API docs at <http://localhost:8202/docs>.
 
 The backend auto-seeds sample series on first boot (controlled by `SEED_SAMPLE=1`). Drop your own `.cbz` / `.cbr` / loose-image folders into `backend/sample_manga/` and hit **Import → Re-scan** in the UI.
 

@@ -1,3 +1,4 @@
+backend/sample_manga/*
 __pycache__/
 *.pyc
 node_modules/

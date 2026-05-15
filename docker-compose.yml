@@ -9,7 +9,7 @@ services:
       MYSQL_USER: kuro
       MYSQL_PASSWORD: kuropass
     ports:
-      - "3307:3306"
+      - "8203:3306"
     volumes:
       - kuro-mysql-data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
@@ -31,7 +31,7 @@ services:
       MANGA_ROOT: /manga
       SEED_SAMPLE: "1"
     ports:
-      - "8000:8000"
+      - "8202:8000"
     volumes:
       - ./backend/app:/app/app:ro
       - ./backend/sample_manga:/manga
@@ -43,9 +43,9 @@ services:
     depends_on:
       - backend
     environment:
-      VITE_API_BASE: http://localhost:8000
+      VITE_API_BASE: http://localhost:8202
     ports:
-      - "5173:5173"
+      - "8201:5173"
     volumes:
       - ./frontend/src:/app/src:ro
       - ./frontend/index.html:/app/index.html:ro
