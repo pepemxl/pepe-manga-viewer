@@ -8,27 +8,76 @@ import { api } from '../lib/api.js';
 const KIND_TO_TAG = { manga: 'CBZ', manhwa: 'webtoon', comic: 'CBR', book: 'EPUB' };
 
 export default function Library() {
-  const [shelves, setShelves] = useState([]);
-  const [sources, setSources] = useState([]);
-  const [items, setItems]     = useState([]);
-  const [shelf, setShelf]     = useState('All');
-  const [sort, setSort]       = useState('recent');
-  const [count, setCount]     = useState(0);
+  const [shelves, setShelves]         = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [sources, setSources]         = useState([]);
+  const [items, setItems]             = useState([]);
+  const [shelf, setShelf]             = useState('All');
+  const [collectionId, setCollectionId] = useState(null);
+  const [sort, setSort]               = useState('recent');
+  const [count, setCount]             = useState(0);
+  const [newName, setNewName]         = useState('');
+  const [adding, setAdding]           = useState(false);
+  const [busy, setBusy]               = useState(false);
+  const [error, setError]             = useState('');
+
+  const refreshShelves     = () => api.shelves().then(r => setShelves(r.items)).catch(() => {});
+  const refreshCollections = () => api.collections().then(r => setCollections(r.items)).catch(() => {});
 
   useEffect(() => {
-    api.shelves().then(r => setShelves(r.items)).catch(() => {});
+    refreshShelves();
+    refreshCollections();
     api.sources().then(r => setSources(r.items)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    api.library({ shelf, sort }).then(r => {
+    const params = collectionId ? { collection: collectionId, sort } : { shelf, sort };
+    api.library(params).then(r => {
       setItems(r.items);
       setCount(r.count);
     }).catch(err => console.error(err));
-  }, [shelf, sort]);
+  }, [shelf, collectionId, sort]);
 
-  const systemShelves   = shelves.filter(s => s.kind === 'system');
-  const collections     = shelves.filter(s => s.kind === 'collection');
+  const pickShelf = (name) => {
+    setShelf(name);
+    setCollectionId(null);
+  };
+
+  const pickCollection = (id) => {
+    setCollectionId(id);
+    setShelf('');
+  };
+
+  const createCollection = async () => {
+    const name = newName.trim();
+    if (!name) { setError('name required'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      const c = await api.createCollection(name);
+      await refreshCollections();
+      setNewName('');
+      setAdding(false);
+      pickCollection(c.id);
+    } catch (e) {
+      const msg = String(e.message || e);
+      setError(msg.replace(/^.*"detail":\s*"([^"]+)".*$/, '$1'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeCollection = async (c) => {
+    if (!window.confirm(`Delete collection "${c.name}"?\n\nSeries inside it are NOT removed.`)) return;
+    await api.deleteCollection(c.id).catch(() => {});
+    if (collectionId === c.id) pickShelf('All');
+    await refreshCollections();
+  };
+
+  const activeCollection = collections.find(c => c.id === collectionId);
+  const headerTitle = activeCollection
+    ? activeCollection.name
+    : shelf === 'All' ? 'All series' : (shelf || 'All series');
 
   return (
     <div className="app-shell">
@@ -38,11 +87,11 @@ export default function Library() {
           <div>
             <div className="sidebar-h">SHELVES</div>
             <div className="sk-col" style={{ gap: 6 }}>
-              {systemShelves.map(s => (
+              {shelves.filter(s => s.kind === 'system').map(s => (
                 <div
                   key={s.id}
-                  className={`sidebar-item ${shelf.toLowerCase() === s.name.toLowerCase() ? 'on' : ''}`}
-                  onClick={() => setShelf(s.name)}
+                  className={`sidebar-item ${!collectionId && shelf.toLowerCase() === s.name.toLowerCase() ? 'on' : ''}`}
+                  onClick={() => pickShelf(s.name)}
                 >
                   <span>{s.name}</span>
                   <span className="count">{s.count}</span>
@@ -50,17 +99,63 @@ export default function Library() {
               ))}
             </div>
           </div>
+
           <div>
             <div className="sidebar-h">COLLECTIONS</div>
-            <div className="sk-col" style={{ gap: 6 }}>
-              {collections.map(s => (
-                <div key={s.id} style={{ fontFamily: 'var(--hand)', fontSize: 15, color: 'var(--ink2)', padding: '2px 8px' }}>
-                  ▸ {s.name}
+            <div className="sk-col" style={{ gap: 4 }}>
+              {collections.map(c => (
+                <div
+                  key={c.id}
+                  className={`sidebar-item ${collectionId === c.id ? 'on' : ''}`}
+                  onClick={() => pickCollection(c.id)}
+                  onContextMenu={e => { e.preventDefault(); removeCollection(c); }}
+                  title="right-click to delete"
+                  style={{ display: 'flex', justifyContent: 'space-between' }}
+                >
+                  <span>▸ {c.name}</span>
+                  <span className="count">{c.count}</span>
                 </div>
               ))}
-              <div style={{ fontFamily: 'var(--hand)', fontSize: 14, color: 'var(--muted)', padding: '2px 8px' }}>+ new collection</div>
+              {!collections.length && (
+                <div style={{ fontFamily: 'var(--hand)', fontSize: 13, color: 'var(--muted)', padding: '2px 8px' }}>
+                  none yet
+                </div>
+              )}
+              {adding ? (
+                <div style={{ display: 'flex', gap: 4, padding: '2px 4px' }}>
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={e => { setNewName(e.target.value); setError(''); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter')   createCollection();
+                      if (e.key === 'Escape')  { setAdding(false); setNewName(''); setError(''); }
+                    }}
+                    placeholder="name…"
+                    style={{
+                      flex: 1, fontFamily: 'var(--hand)', fontSize: 14,
+                      padding: '2px 6px', border: '1.25px solid var(--ink2)',
+                      borderRadius: 4, background: 'var(--paper)', color: 'var(--ink)',
+                    }}
+                  />
+                  <Btn small onClick={createCollection} disabled={busy}>add</Btn>
+                </div>
+              ) : (
+                <div
+                  style={{ fontFamily: 'var(--hand)', fontSize: 14, color: 'var(--muted)', padding: '2px 8px', cursor: 'pointer' }}
+                  onClick={() => setAdding(true)}
+                >
+                  + new collection
+                </div>
+              )}
+              {error && (
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)', padding: '2px 8px' }}>
+                  ✕ {error}
+                </div>
+              )}
             </div>
           </div>
+
           <div>
             <div className="sidebar-h">FOLDERS</div>
             <div className="sk-col" style={{ gap: 4 }}>
@@ -76,11 +171,9 @@ export default function Library() {
 
         <main style={{ flex: 1, padding: '18px 24px', overflow: 'auto', minHeight: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 14 }}>
-            <h1 style={{ fontFamily: 'var(--hand)', fontSize: 30, fontWeight: 700, margin: 0 }}>
-              {shelf === 'All' ? 'All series' : shelf}
-            </h1>
+            <h1 style={{ fontFamily: 'var(--hand)', fontSize: 30, fontWeight: 700, margin: 0 }}>{headerTitle}</h1>
             <span className="sk-mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {count} items · {sources.length} sources
+              {count} items{activeCollection ? ' · collection' : ` · ${sources.length} sources`}
             </span>
             <div style={{ flex: 1 }} />
             <Chip on={sort === 'title'}    onClick={() => setSort('title')}>title</Chip>
@@ -90,9 +183,18 @@ export default function Library() {
 
           {items.length === 0 && (
             <div className="sk-box-dashed" style={{ padding: 36, textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--hand)', fontSize: 22 }}>Your library is empty.</div>
+              <div style={{ fontFamily: 'var(--hand)', fontSize: 22 }}>
+                {activeCollection
+                  ? `“${activeCollection.name}” is empty`
+                  : 'Your library is empty.'}
+              </div>
+              <div style={{ marginTop: 12, fontFamily: 'var(--hand)', fontSize: 14, color: 'var(--muted)' }}>
+                {activeCollection
+                  ? 'Open a series and click a collection chip to add it.'
+                  : ''}
+              </div>
               <div style={{ marginTop: 12 }}>
-                <Link to="/import"><Btn primary>＋ add folder</Btn></Link>
+                {!activeCollection && <Link to="/import"><Btn primary>＋ add folder</Btn></Link>}
               </div>
             </div>
           )}

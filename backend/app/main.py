@@ -55,6 +55,16 @@ def _migrate() -> None:
     statements = [
         "ALTER TABLE series ADD COLUMN reading_mode VARCHAR(20) NULL",
         "ALTER TABLE series ADD COLUMN fit VARCHAR(20) NULL",
+        (
+            "CREATE TABLE IF NOT EXISTS series_collections ("
+            "  series_id INT NOT NULL,"
+            "  shelf_id  INT NOT NULL,"
+            "  added_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+            "  PRIMARY KEY (series_id, shelf_id),"
+            "  CONSTRAINT fk_sc_series FOREIGN KEY (series_id) REFERENCES series(id)  ON DELETE CASCADE,"
+            "  CONSTRAINT fk_sc_shelf  FOREIGN KEY (shelf_id)  REFERENCES shelves(id) ON DELETE CASCADE"
+            ")"
+        ),
     ]
     with engine.begin() as conn:
         for stmt in statements:

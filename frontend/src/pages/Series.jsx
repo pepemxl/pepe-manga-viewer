@@ -48,8 +48,20 @@ export default function Series() {
   const nav = useNavigate();
   const [s, setS] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [allCollections, setAllCollections] = useState([]);
 
-  useEffect(() => { api.series(id).then(setS).catch(console.error); }, [id]);
+  const refresh = () => api.series(id).then(setS).catch(console.error);
+  const refreshCollections = () => api.collections().then(r => setAllCollections(r.items)).catch(() => {});
+
+  useEffect(() => { refresh(); refreshCollections(); }, [id]);
+
+  const toggleCollection = async (coll) => {
+    if (!s) return;
+    const inIt = s.collections?.some(c => c.id === coll.id);
+    if (inIt) await api.removeFromCollection(coll.id, s.id).catch(() => {});
+    else      await api.addToCollection(coll.id, s.id).catch(() => {});
+    await Promise.all([refresh(), refreshCollections()]);
+  };
 
   if (!s) return <div className="app-shell"><AppBar /><div style={{ padding: 40 }}>loading…</div></div>;
 
@@ -108,6 +120,27 @@ export default function Series() {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {tagTokens.map(t => <Chip key={t}>{t}</Chip>)}
+          </div>
+
+          <div>
+            <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
+              COLLECTIONS
+            </div>
+            {!allCollections.length && (
+              <div style={{ fontFamily: 'var(--hand)', fontSize: 13, color: 'var(--muted)' }}>
+                none — create one from the Library sidebar
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {allCollections.map(c => {
+                const on = s.collections?.some(x => x.id === c.id);
+                return (
+                  <Chip key={c.id} on={on} onClick={() => toggleCollection(c)}>
+                    {on ? '✓ ' : '+ '}{c.name}
+                  </Chip>
+                );
+              })}
+            </div>
           </div>
         </div>
 

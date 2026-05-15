@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, Numeric, SmallInteger
+    Column, Integer, String, Text, DateTime, ForeignKey, Numeric, SmallInteger, Table
 )
 from sqlalchemy.orm import relationship
 
@@ -23,6 +23,14 @@ class Shelf(Base):
     name = Column(String(120), nullable=False, unique=True)
     kind = Column(String(40), nullable=False, default="shelf")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+series_collections = Table(
+    "series_collections", Base.metadata,
+    Column("series_id", Integer, ForeignKey("series.id",   ondelete="CASCADE"), primary_key=True),
+    Column("shelf_id",  Integer, ForeignKey("shelves.id",  ondelete="CASCADE"), primary_key=True),
+    Column("added_at",  DateTime, default=datetime.utcnow, nullable=False),
+)
 
 
 class Series(Base):
@@ -48,6 +56,7 @@ class Series(Base):
         "Chapter", back_populates="series",
         cascade="all, delete-orphan", order_by="Chapter.number_sort"
     )
+    collections = relationship("Shelf", secondary=series_collections, lazy="selectin")
 
 
 class Chapter(Base):

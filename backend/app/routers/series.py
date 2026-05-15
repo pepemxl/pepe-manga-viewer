@@ -37,6 +37,9 @@ def get_series(series_id: int, db: Session = Depends(get_db)):
         "id": b.id, "series_id": b.series_id, "chapter_id": b.chapter_id,
         "page": b.page, "note": b.note, "created_at": b.created_at,
     } for b in bookmarks]
+    summary["collections"] = [
+        {"id": c.id, "name": c.name} for c in s.collections if c.kind == "collection"
+    ]
     return summary
 
 

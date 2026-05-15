@@ -441,15 +441,61 @@ function StoragePane() {
 }
 
 function AboutPane() {
+  const features = [
+    ['▥', 'Library',    'Sidebar shelves + cover grid. Filter, search, and hide finished series.'],
+    ['▣', 'Reader',     'Four modes — single, double, horizontal & vertical continuous. RTL/LTR, fit width/height/original, click zones, fullscreen.'],
+    ['▤', 'Series',     'Cover, metadata, and chapter list. Per-series overrides for reading mode and direction.'],
+    ['📁', 'Sources',   'Mount any host folder as a watched source. Scan turns subfolders or .cbz / .cbr files into series.'],
+    ['◐', 'Themes',     'Five themes — light, sepia, dark, oled, noir. Reduce-motion and cover-progress toggles.'],
+    ['⌘', 'Shortcuts',  'Keyboard-first: pages, chapters, bookmarks, page-jump, mode cycle, fullscreen.'],
+    ['▤', 'Progress',   'Last-page memory per chapter, auto-finish on last page, bookmark any page with B.'],
+    ['◰', 'Dashboard',  'Stats summary and in-progress list to pick up where you left off.'],
+  ];
+  const stack = [
+    ['frontend', 'Vite + React',          'host :8201'],
+    ['backend',  'FastAPI + SQLAlchemy',  'host :8202'],
+    ['database', 'MySQL 8',                'host :8203'],
+    ['orchestr', 'docker compose',        '3 services'],
+  ];
   return (
     <div>
       <h2 style={{ fontFamily: 'var(--hand)', fontSize: 28, fontWeight: 700, margin: 0 }}>pepe-manga.read</h2>
-      <div style={{ fontFamily: 'var(--hand)', fontSize: 16, marginTop: 10 }}>
-        Built from Claude Design wireframes. Vite + React frontend, FastAPI backend, MySQL.
+      <div style={{ fontFamily: 'var(--hand)', fontSize: 15, color: 'var(--muted)', marginTop: 4 }}>
+        Desktop manga / manhwa / comic / book reader. 
       </div>
-      <div style={{ fontFamily: 'var(--hand)', fontSize: 14, color: 'var(--muted)', marginTop: 6 }}>
-        Locked surfaces: Library A · Series A · Reader A · Import B · Dashboard C · Settings A.
+
+      <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 18, marginBottom: 6 }}>WHAT IT DOES</div>
+      <div className="sk-col" style={{ gap: 0 }}>
+        {features.map(([gl, name, desc]) => (
+          <div key={name} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 12,
+            padding: '8px 0', borderBottom: '1px dashed var(--faint)',
+          }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 14, width: 22, textAlign: 'center', flexShrink: 0 }}>{gl}</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: 'var(--hand)', fontSize: 15, fontWeight: 700 }}>{name}</div>
+              <div style={{ fontFamily: 'var(--hand)', fontSize: 13, color: 'var(--muted)' }}>{desc}</div>
+            </div>
+          </div>
+        ))}
       </div>
+
+      <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 18, marginBottom: 6 }}>STACK</div>
+      <div className="sk-box-flat" style={{ padding: 12 }}>
+        {stack.map(([k, v, port]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '3px 0' }}>
+            <span className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', width: 70 }}>{k}</span>
+            <span style={{ fontFamily: 'var(--hand)', fontSize: 14, flex: 1 }}>{v}</span>
+            <span className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{port}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 18, marginBottom: 6 }}>SUPPORTED FORMATS</div>
+      <div style={{ fontFamily: 'var(--hand)', fontSize: 14 }}>
+        <code>.cbz</code> · <code>.cbr</code> · loose-image folders (jpg / png / webp)
+      </div>
+
     </div>
   );
 }

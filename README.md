@@ -1,6 +1,6 @@
 # pepe-manga.read
 
-Desktop manga / manhwa / comic / book reader. Built from Claude Design wireframes — hand-sketched aesthetic, Architects Daughter + IBM Plex Mono fonts, warm rust accent.
+Desktop manga / manhwa / comic / book reader.
 
 ## Stack
 
@@ -30,19 +30,6 @@ docker compose up -d    # restart picks up the new mount
 ```
 
 That host folder is now visible inside the backend container at **`/host`** (read-only). In the UI, **Settings → Sources** → add `/host` (or any subfolder of it) — the folder browser there starts at `/host` so you can navigate visually.
-
-## Surfaces
-
-Following the locked wireframe set:
-
-| Surface     | Variant | Notes                                         |
-|-------------|---------|-----------------------------------------------|
-| Library     | A       | Sidebar shelves + cover grid                  |
-| Series      | A       | Cover left, chapter list right                |
-| Reader      | A       | Single page RTL (toggleable to all 4 modes)   |
-| Import      | B       | 3-step wizard                                 |
-| Dashboard   | C       | Stats summary + in-progress list              |
-| Settings    | A       | Sidebar nav + pane                            |
 
 ## Reader shortcuts
 

@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   CONSTRAINT fk_bm_chapter FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS series_collections (
+  series_id  INT NOT NULL,
+  shelf_id   INT NOT NULL,
+  added_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (series_id, shelf_id),
+  CONSTRAINT fk_sc_series FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sc_shelf  FOREIGN KEY (shelf_id)  REFERENCES shelves(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   k VARCHAR(64) PRIMARY KEY,
   v TEXT NOT NULL

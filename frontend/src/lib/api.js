@@ -20,6 +20,15 @@ async function req(method, path, body) {
 export const api = {
   library:  (params = {}) => req('GET', '/api/library' + qs(params)),
   shelves:  () => req('GET', '/api/library/shelves'),
+
+  collections:         () => req('GET',  '/api/library/collections'),
+  createCollection:    (name) => req('POST',   '/api/library/collections', { name }),
+  deleteCollection:    (id) => req('DELETE', `/api/library/collections/${id}`),
+  addToCollection:     (id, seriesId) =>
+    req('POST', `/api/library/collections/${id}/series`, { series_id: seriesId }),
+  removeFromCollection: (id, seriesId) =>
+    req('DELETE', `/api/library/collections/${id}/series/${seriesId}`),
+
   sources:       () => req('GET', '/api/library/sources'),
   addSource:     (path, scan = true) => req('POST', '/api/library/sources', { path, scan }),
   updateSource:  (id, body) => req('PATCH', `/api/library/sources/${id}`, body),
