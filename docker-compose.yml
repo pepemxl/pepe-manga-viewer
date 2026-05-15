@@ -1,0 +1,54 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kuro-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: kuroroot
+      MYSQL_DATABASE: kuro
+      MYSQL_USER: kuro
+      MYSQL_PASSWORD: kuropass
+    ports:
+      - "3307:3306"
+    volumes:
+      - kuro-mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukuro", "-pkuropass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: kuro-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql+pymysql://kuro:kuropass@mysql:3306/kuro
+      MANGA_ROOT: /manga
+      SEED_SAMPLE: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/sample_manga:/manga
+
+  frontend:
+    build: ./frontend
+    container_name: kuro-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+
+volumes:
+  kuro-mysql-data:
