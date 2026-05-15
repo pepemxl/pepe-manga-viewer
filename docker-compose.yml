@@ -35,6 +35,10 @@ services:
     volumes:
       - ./backend/app:/app/app:ro
       - ./backend/sample_manga:/manga
+      # Bridge to a host directory so the user can add sources outside the container.
+      # Default points back at sample_manga so the mount is always valid; override
+      # by setting HOST_MEDIA_DIR in .env (see .env.example).
+      - ${HOST_MEDIA_DIR:-./backend/sample_manga}:/host:ro
 
   frontend:
     build: ./frontend

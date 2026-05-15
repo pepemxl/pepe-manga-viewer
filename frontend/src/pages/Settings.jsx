@@ -27,9 +27,11 @@ export default function Settings() {
   const [sources, setSources] = useState([]);
   const { settings: s, update: save } = useSettings();
 
-  useEffect(() => {
-    api.sources().then(r => setSources(r.items)).catch(() => {});
-  }, []);
+  const refreshSources = () => api.sources()
+    .then(r => setSources(r.items))
+    .catch(() => {});
+
+  useEffect(() => { refreshSources(); }, []);
 
   return (
     <div className="app-shell">
@@ -54,7 +56,7 @@ export default function Settings() {
           {section === 'reader'     && <ReaderPane s={s} save={save} />}
           {section === 'appearance' && <AppearancePane s={s} save={save} />}
           {section === 'library'    && <LibraryPane s={s} save={save} />}
-          {section === 'sources'    && <SourcesPane sources={sources} />}
+          {section === 'sources'    && <SourcesPane sources={sources} refresh={refreshSources} />}
           {section === 'shortcuts'  && <ShortcutsPane />}
           {section === 'storage'    && <StoragePane />}
           {section === 'about'      && <AboutPane />}
@@ -195,22 +197,203 @@ function LibraryPane({ s, save }) {
   );
 }
 
-function SourcesPane({ sources }) {
+function SourcesPane({ sources, refresh }) {
+  const [path, setPath] = useState('');
+  const [autoScan, setAutoScan] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
+  const [browser, setBrowser] = useState(null);  // null = closed, else { loc, items, parent }
+
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(''), 1800); };
+
+  const loadBrowser = async (loc) => {
+    try {
+      const r = await api.browse(loc);
+      setBrowser({ loc: r.path, parent: r.parent, items: r.items });
+    } catch (e) {
+      setError(`browse failed: ${e.message || e}`);
+    }
+  };
+
+  const openBrowser = () => loadBrowser('/host');
+
+  const add = async () => {
+    setError('');
+    const p = path.trim();
+    if (!p) { setError('enter a folder path'); return; }
+    setBusy(true);
+    try {
+      const r = await api.addSource(p, autoScan);
+      const sc = r.scanned || {};
+      flash(autoScan
+        ? `added ${r.path} · +${sc.series ?? 0} series, +${sc.chapters ?? 0} chapters`
+        : `added ${r.path}`);
+      setPath('');
+      await refresh();
+    } catch (e) {
+      const msg = String(e.message || e);
+      setError(msg.replace(/^\d{3} [A-Z][^—]*—\s*/, '').replace(/^.*"detail":\s*"([^"]+)".*$/, '$1'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const scan = async (id) => {
+    setBusy(true);
+    try {
+      const r = await api.scanSource(id);
+      flash(`scan complete · +${r.series} series, +${r.chapters} chapters`);
+      await refresh();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const toggle = async (s) => {
+    try {
+      await api.updateSource(s.id, { enabled: !s.enabled });
+      await refresh();
+    } catch (e) { setError(String(e.message || e)); }
+  };
+
+  const remove = async (s) => {
+    if (!window.confirm(`Remove source "${s.path}"?\n\nThis unlinks but doesn't delete any series.`)) return;
+    setBusy(true);
+    try {
+      await api.deleteSource(s.id);
+      flash('source removed');
+      await refresh();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div>
       <h2 style={{ fontFamily: 'var(--hand)', fontSize: 28, fontWeight: 700, margin: 0 }}>Sources</h2>
-      <div className="sk-col" style={{ gap: 6, marginTop: 14 }}>
-        {sources.map(s => (
-          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px dashed var(--faint)' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{s.path}</span>
-            <div style={{ flex: 1 }} />
-            <span className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-              {s.count} series · {s.last_scan_at ? `last scan ${s.last_scan_at.replace('T',' ').slice(0,16)}` : 'never scanned'}
-            </span>
+      <div style={{ fontFamily: 'var(--hand)', fontSize: 14, color: 'var(--muted)', marginBottom: 14 }}>
+        Folders the app watches. Each scan turns one-level-deep subfolders (or .cbz files) into series.
+      </div>
+
+      <div className="sk-box-flat" style={{ padding: 14, marginBottom: 14 }}>
+        <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 8 }}>ADD A SOURCE</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            value={path}
+            onChange={e => { setPath(e.target.value); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && !busy && add()}
+            placeholder="/manga  or  /host/Comics"
+            style={{
+              flex: 1, padding: '6px 8px', fontFamily: 'var(--mono)', fontSize: 12,
+              border: '1.25px solid var(--ink2)', borderRadius: 4,
+              background: 'var(--paper)', color: 'var(--ink)',
+            }}
+          />
+          <Btn small onClick={browser ? () => setBrowser(null) : openBrowser}>
+            {browser ? 'close ✕' : 'browse…'}
+          </Btn>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--hand)', fontSize: 13, cursor: 'pointer' }}>
+            <Toggle on={autoScan} onChange={setAutoScan} /> scan now
+          </label>
+          <Btn primary onClick={add} disabled={busy || !path.trim()}>
+            {busy ? '…' : '＋ add'}
+          </Btn>
+        </div>
+        {error && (
+          <div style={{ marginTop: 8, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)' }}>
+            ✕ {error}
+          </div>
+        )}
+        <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 8 }}>
+          paths are resolved <em>inside the backend container</em>:
+          {' '}<strong>/manga</strong> is the seeded folder ·
+          {' '}<strong>/host</strong> is your <code>HOST_MEDIA_DIR</code> bind-mount (set in <code>.env</code>)
+        </div>
+
+        {browser && (
+          <div className="sk-box-soft" style={{ marginTop: 10, padding: 10, background: 'var(--panel)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span className="sk-mono" style={{ fontSize: 11, color: 'var(--ink)' }}>📂 {browser.loc}</span>
+              <div style={{ flex: 1 }} />
+              <Btn small onClick={() => { setPath(browser.loc); flash(`picked ${browser.loc}`); }}>
+                use this folder
+              </Btn>
+            </div>
+            <div style={{ maxHeight: 220, overflow: 'auto', fontFamily: 'var(--mono)', fontSize: 11 }}>
+              {browser.parent && browser.parent !== browser.loc && (
+                <div
+                  style={{ padding: '3px 0', cursor: 'pointer', color: 'var(--muted)' }}
+                  onClick={() => loadBrowser(browser.parent)}
+                >
+                  ↑ {browser.parent}
+                </div>
+              )}
+              {browser.items.length === 0 && (
+                <div style={{ color: 'var(--muted)', padding: '6px 0' }}>(empty)</div>
+              )}
+              {browser.items.map(it => (
+                <div
+                  key={it.path}
+                  onClick={() => it.is_dir && loadBrowser(it.path)}
+                  style={{
+                    padding: '3px 0', cursor: it.is_dir ? 'pointer' : 'default',
+                    color: it.is_dir ? 'var(--ink)' : 'var(--muted)',
+                  }}
+                >
+                  {it.is_dir ? '▸ ' : '· '}{it.name}
+                </div>
+              ))}
+            </div>
+            <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+              click a folder to navigate · click <em>use this folder</em> to fill the input
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
+        WATCHED · {sources.length}
+      </div>
+      <div className="sk-col" style={{ gap: 0 }}>
+        {sources.map(src => (
+          <div key={src.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 6px', borderBottom: '1px dashed var(--faint)',
+          }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink)' }}>📁</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)' }}>{src.path}</div>
+              <div className="sk-mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+                {src.count} series ·{' '}
+                {src.last_scan_at
+                  ? `last scan ${src.last_scan_at.replace('T',' ').slice(0,16)}`
+                  : 'never scanned'}
+              </div>
+            </div>
+            <Btn small onClick={() => scan(src.id)} disabled={busy}>↺ scan</Btn>
+            <Toggle on={!!src.enabled} onChange={() => toggle(src)} />
+            <Btn small onClick={() => remove(src)} disabled={busy}>🗑</Btn>
           </div>
         ))}
-        {!sources.length && <div style={{ color: 'var(--muted)', fontFamily: 'var(--hand)' }}>no sources yet — use Import</div>}
+        {!sources.length && (
+          <div style={{ color: 'var(--muted)', fontFamily: 'var(--hand)', padding: '14px 0' }}>
+            no sources yet — add one above
+          </div>
+        )}
       </div>
+
+      <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+        <Btn small onClick={async () => {
+          setBusy(true);
+          try {
+            const r = await api.rescan();
+            flash(`re-scan complete · +${r.series} series, +${r.chapters} chapters`);
+            await refresh();
+          } catch (e) { setError(String(e.message || e)); }
+          finally { setBusy(false); }
+        }} disabled={busy}>↺ rescan all</Btn>
+      </div>
+
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }

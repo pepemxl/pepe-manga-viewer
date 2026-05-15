@@ -1,11 +1,13 @@
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, scanner
 from ..database import get_db
 
 router = APIRouter(prefix="/api/library", tags=["library"])
@@ -85,16 +87,87 @@ def list_shelves(db: Session = Depends(get_db)):
     return {"items": out}
 
 
+def _source_to_dict(db: Session, r: models.Source) -> dict:
+    cnt = db.query(func.count(models.Series.id)).filter(
+        models.Series.source_id == r.id
+    ).scalar() or 0
+    return {
+        "id": r.id, "path": r.path, "enabled": int(r.enabled),
+        "last_scan_at": r.last_scan_at, "count": cnt,
+    }
+
+
 @router.get("/sources")
 def list_sources(db: Session = Depends(get_db)):
-    rows = db.query(models.Source).all()
-    out = []
-    for r in rows:
-        cnt = db.query(func.count(models.Series.id)).filter(
-            models.Series.source_id == r.id
-        ).scalar() or 0
-        out.append({
-            "id": r.id, "path": r.path, "enabled": int(r.enabled),
-            "last_scan_at": r.last_scan_at, "count": cnt,
-        })
-    return {"items": out}
+    rows = db.query(models.Source).order_by(models.Source.id.asc()).all()
+    return {"items": [_source_to_dict(db, r) for r in rows]}
+
+
+class SourceIn(BaseModel):
+    path: str
+    scan: bool = True
+
+
+@router.post("/sources", status_code=201)
+def add_source(body: SourceIn, db: Session = Depends(get_db)):
+    path = body.path.strip()
+    if not path:
+        raise HTTPException(400, "path required")
+    p = Path(path)
+    if not p.exists():
+        raise HTTPException(400, f"path does not exist: {path}")
+    if not p.is_dir():
+        raise HTTPException(400, "path must be a directory")
+    if db.query(models.Source).filter_by(path=str(p)).first():
+        raise HTTPException(409, "source already exists")
+
+    src = models.Source(path=str(p), enabled=1)
+    db.add(src)
+    db.commit()
+    db.refresh(src)
+
+    scanned = {"series": 0, "chapters": 0}
+    if body.scan:
+        scanned = scanner.commit(db, src.path)
+        db.refresh(src)
+
+    return {**_source_to_dict(db, src), "scanned": scanned}
+
+
+class SourcePatch(BaseModel):
+    enabled: Optional[bool] = None
+
+
+@router.patch("/sources/{source_id}")
+def update_source(source_id: int, body: SourcePatch, db: Session = Depends(get_db)):
+    src = db.query(models.Source).get(source_id)
+    if not src:
+        raise HTTPException(404)
+    if body.enabled is not None:
+        src.enabled = 1 if body.enabled else 0
+    db.commit()
+    return _source_to_dict(db, src)
+
+
+@router.delete("/sources/{source_id}")
+def delete_source(source_id: int, db: Session = Depends(get_db)):
+    src = db.query(models.Source).get(source_id)
+    if not src:
+        raise HTTPException(404)
+    # Unlink any series pointing at this source — keep the series themselves.
+    db.query(models.Series).filter_by(source_id=source_id).update(
+        {"source_id": None}, synchronize_session=False
+    )
+    db.delete(src)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/sources/{source_id}/scan")
+def scan_source(source_id: int, db: Session = Depends(get_db)):
+    src = db.query(models.Source).get(source_id)
+    if not src:
+        raise HTTPException(404)
+    result = scanner.commit(db, src.path)
+    db.refresh(src)
+    return {**_source_to_dict(db, src), **result}
