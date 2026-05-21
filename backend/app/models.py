@@ -40,6 +40,7 @@ class Series(Base):
     author = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     kind = Column(String(40), nullable=False, default="manga")
+    language = Column(String(40), nullable=True)
     direction = Column(String(10), nullable=False, default="LTR")
     reading_mode = Column(String(20), nullable=True)
     fit = Column(String(20), nullable=True)

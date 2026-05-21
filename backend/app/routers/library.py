@@ -32,6 +32,7 @@ def _series_summary(db: Session, s: models.Series) -> dict:
     return {
         "id": s.id, "title": s.title, "author": s.author,
         "description": s.description, "kind": s.kind, "direction": s.direction,
+        "language": s.language,
         "source_path": s.source_path, "format": s.format, "tags": s.tags,
         "shelf": s.shelf, "cover_url": s.cover_url,
         "chapter_count": chapter_count,
@@ -46,6 +47,7 @@ def list_library(
     shelf: Optional[str] = Query(default=None),
     kind: Optional[str] = Query(default=None),
     collection: Optional[int] = Query(default=None),
+    language: Optional[str] = Query(default=None),
     sort: str = Query(default="recent"),
     db: Session = Depends(get_db),
 ):
@@ -57,6 +59,11 @@ def list_library(
         q = q.filter(func.lower(models.Series.shelf) == shelf.lower())
     if kind:
         q = q.filter(models.Series.kind == kind)
+    if language:
+        if language.lower() == "unknown":
+            q = q.filter(models.Series.language.is_(None))
+        else:
+            q = q.filter(func.lower(models.Series.language) == language.lower())
     rows = q.all()
     items = [_series_summary(db, s) for s in rows]
     if sort == "title":
@@ -69,6 +76,22 @@ def list_library(
             reverse=True,
         )
     return {"items": items, "count": len(items)}
+
+
+@router.get("/languages")
+def list_languages(db: Session = Depends(get_db)):
+    """Distinct languages currently present in the library, with counts.
+    Series with no detected language are bucketed under 'Unknown'."""
+    rows = (
+        db.query(models.Series.language, func.count(models.Series.id))
+        .group_by(models.Series.language)
+        .all()
+    )
+    items = []
+    for lang, cnt in rows:
+        items.append({"name": lang or "Unknown", "count": int(cnt or 0)})
+    items.sort(key=lambda x: (x["name"] == "Unknown", x["name"].lower()))
+    return {"items": items}
 
 
 @router.get("/shelves")
