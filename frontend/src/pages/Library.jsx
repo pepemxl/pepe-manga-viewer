@@ -10,10 +10,12 @@ const KIND_TO_TAG = { manga: 'CBZ', manhwa: 'webtoon', comic: 'CBR', book: 'EPUB
 export default function Library() {
   const [shelves, setShelves]         = useState([]);
   const [collections, setCollections] = useState([]);
+  const [languages, setLanguages]     = useState([]);
   const [sources, setSources]         = useState([]);
   const [items, setItems]             = useState([]);
   const [shelf, setShelf]             = useState('All');
   const [collectionId, setCollectionId] = useState(null);
+  const [language, setLanguage]       = useState(null);  // null = any
   const [sort, setSort]               = useState('recent');
   const [count, setCount]             = useState(0);
   const [newName, setNewName]         = useState('');
@@ -23,20 +25,24 @@ export default function Library() {
 
   const refreshShelves     = () => api.shelves().then(r => setShelves(r.items)).catch(() => {});
   const refreshCollections = () => api.collections().then(r => setCollections(r.items)).catch(() => {});
+  const refreshLanguages   = () => api.languages().then(r => setLanguages(r.items)).catch(() => {});
 
   useEffect(() => {
     refreshShelves();
     refreshCollections();
+    refreshLanguages();
     api.sources().then(r => setSources(r.items)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    const params = collectionId ? { collection: collectionId, sort } : { shelf, sort };
+    const base = collectionId ? { collection: collectionId } : { shelf };
+    const params = { ...base, sort };
+    if (language) params.language = language;
     api.library(params).then(r => {
       setItems(r.items);
       setCount(r.count);
     }).catch(err => console.error(err));
-  }, [shelf, collectionId, sort]);
+  }, [shelf, collectionId, language, sort]);
 
   const pickShelf = (name) => {
     setShelf(name);
@@ -46,6 +52,10 @@ export default function Library() {
   const pickCollection = (id) => {
     setCollectionId(id);
     setShelf('');
+  };
+
+  const pickLanguage = (name) => {
+    setLanguage(prev => prev === name ? null : name);
   };
 
   const createCollection = async () => {
@@ -157,6 +167,29 @@ export default function Library() {
           </div>
 
           <div>
+            <div className="sidebar-h">LANGUAGES</div>
+            <div className="sk-col" style={{ gap: 4 }}>
+              {!languages.length && (
+                <div style={{ fontFamily: 'var(--hand)', fontSize: 13, color: 'var(--muted)', padding: '2px 8px' }}>
+                  none detected
+                </div>
+              )}
+              {languages.map(l => (
+                <div
+                  key={l.name}
+                  className={`sidebar-item ${language === l.name ? 'on' : ''}`}
+                  onClick={() => pickLanguage(l.name)}
+                  title={language === l.name ? 'click to clear' : `show only ${l.name}`}
+                  style={{ display: 'flex', justifyContent: 'space-between' }}
+                >
+                  <span>{l.name}</span>
+                  <span className="count">{l.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <div className="sidebar-h">FOLDERS</div>
             <div className="sk-col" style={{ gap: 4 }}>
               {sources.map(s => (
@@ -175,6 +208,11 @@ export default function Library() {
             <span className="sk-mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
               {count} items{activeCollection ? ' · collection' : ` · ${sources.length} sources`}
             </span>
+            {language && (
+              <Chip on accent onClick={() => setLanguage(null)} title="clear language filter">
+                {language} ✕
+              </Chip>
+            )}
             <div style={{ flex: 1 }} />
             <Chip on={sort === 'title'}    onClick={() => setSort('title')}>title</Chip>
             <Chip on={sort === 'recent'}   onClick={() => setSort('recent')}>recent</Chip>
@@ -215,7 +253,7 @@ export default function Library() {
                 />
                 <div style={{ fontFamily: 'var(--hand)', fontSize: 13, marginTop: 5, lineHeight: 1.15 }}>{s.title}</div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--muted)', marginTop: 1 }}>
-                  {s.kind} · {s.chapter_count} ch{s.unread_count ? ` · ${s.unread_count} unread` : ''}
+                  {s.kind}{s.language ? ` · ${s.language}` : ''} · {s.chapter_count} ch{s.unread_count ? ` · ${s.unread_count} unread` : ''}
                 </div>
               </Link>
             ))}

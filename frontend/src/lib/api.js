@@ -18,8 +18,9 @@ async function req(method, path, body) {
 }
 
 export const api = {
-  library:  (params = {}) => req('GET', '/api/library' + qs(params)),
-  shelves:  () => req('GET', '/api/library/shelves'),
+  library:   (params = {}) => req('GET', '/api/library' + qs(params)),
+  shelves:   () => req('GET', '/api/library/shelves'),
+  languages: () => req('GET', '/api/library/languages'),
 
   collections:         () => req('GET',  '/api/library/collections'),
   createCollection:    (name) => req('POST',   '/api/library/collections', { name }),

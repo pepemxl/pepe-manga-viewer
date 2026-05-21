@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS series (
   author       VARCHAR(255) NULL,
   description  TEXT NULL,
   kind         VARCHAR(40)  NOT NULL DEFAULT 'manga',
+  language     VARCHAR(40)  NULL,
   direction    VARCHAR(10)  NOT NULL DEFAULT 'LTR',
   reading_mode VARCHAR(20)  NULL,
   fit          VARCHAR(20)  NULL,
@@ -37,8 +38,9 @@ CREATE TABLE IF NOT EXISTS series (
   CONSTRAINT fk_series_source FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_series_shelf ON series(shelf);
-CREATE INDEX idx_series_kind  ON series(kind);
+CREATE INDEX idx_series_shelf    ON series(shelf);
+CREATE INDEX idx_series_kind     ON series(kind);
+CREATE INDEX idx_series_language ON series(language);
 
 CREATE TABLE IF NOT EXISTS chapters (
   id           INT AUTO_INCREMENT PRIMARY KEY,
