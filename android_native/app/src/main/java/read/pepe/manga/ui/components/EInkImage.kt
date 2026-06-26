@@ -7,8 +7,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
-import read.pepe.manga.ui.theme.AppTheming
 import read.pepe.manga.ui.theme.ImageRendering
+import read.pepe.manga.ui.theme.LocalImageRendering
 
 /**
  * Color filter that emulates the active panel:
@@ -17,7 +17,7 @@ import read.pepe.manga.ui.theme.ImageRendering
  *  - FULL_COLOR → no filter
  */
 @Composable
-fun panelColorFilter(): ColorFilter? = when (AppTheming.colors.imageRendering) {
+fun panelColorFilter(): ColorFilter? = when (LocalImageRendering.current) {
     ImageRendering.GRAYSCALE -> remember {
         val c = 1.16f
         val t = (-0.5f * c + 0.5f) * 255f

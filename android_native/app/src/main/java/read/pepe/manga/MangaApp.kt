@@ -9,6 +9,8 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import read.pepe.manga.data.local.LocalPageFetcher
+import read.pepe.manga.data.local.PageRefKeyer
 import read.pepe.manga.data.remote.ApiFactory
 import read.pepe.manga.di.ServiceLocator
 
@@ -23,6 +25,13 @@ class MangaApp : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {
+                // PageRef models are served local-first (download → disk → display).
+                add(PageRefKeyer())
+                add(LocalPageFetcher.Factory(
+                    settings = ServiceLocator.settingsStore,
+                    callFactory = { ApiFactory.okHttp },
+                ))
+                // Plain URL models (covers) keep using the network fetcher.
                 add(OkHttpNetworkFetcherFactory(callFactory = { ApiFactory.okHttp }))
             }
             .memoryCache {

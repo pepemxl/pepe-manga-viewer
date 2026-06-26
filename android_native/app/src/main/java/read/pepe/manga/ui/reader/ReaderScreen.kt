@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import read.pepe.manga.data.local.PageRef
 import read.pepe.manga.reader.ReadDirection
 import read.pepe.manga.reader.ReadFit
 import read.pepe.manga.reader.ReadMode
@@ -181,13 +182,13 @@ private fun PagedStage(data: ReaderData, view: ReaderView, page: Int) {
     }
     Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
         if (view.mode == ReadMode.SINGLE) {
-            PageImage(data.pageUrls.getOrNull(page - 1), contentScale, Modifier.fillMaxSize())
+            PageImage(data.pages.getOrNull(page - 1), contentScale, Modifier.fillMaxSize())
         } else {
             // double spread: page 1 alone, else pairs; ordering flips for RTL
             val (leftIdx, rightIdx) = spreadIndices(page, data.chapter.pageCount, view.direction)
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                PageSlot(data.pageUrls.getOrNull(leftIdx), contentScale, Modifier.weight(1f).fillMaxHeight())
-                PageSlot(data.pageUrls.getOrNull(rightIdx), contentScale, Modifier.weight(1f).fillMaxHeight())
+                PageSlot(data.pages.getOrNull(leftIdx), contentScale, Modifier.weight(1f).fillMaxHeight())
+                PageSlot(data.pages.getOrNull(rightIdx), contentScale, Modifier.weight(1f).fillMaxHeight())
             }
         }
     }
@@ -207,17 +208,17 @@ private fun spreadIndices(page: Int, total: Int, dir: ReadDirection): Pair<Int, 
 }
 
 @Composable
-private fun PageSlot(url: String?, contentScale: ContentScale, modifier: Modifier) {
-    if (url == null) Box(modifier) else PageImage(url, contentScale, modifier)
+private fun PageSlot(page: PageRef?, contentScale: ContentScale, modifier: Modifier) {
+    if (page == null) Box(modifier) else PageImage(page, contentScale, modifier)
 }
 
 @Composable
-private fun PageImage(url: String?, contentScale: ContentScale, modifier: Modifier) {
-    if (url == null) {
+private fun PageImage(page: PageRef?, contentScale: ContentScale, modifier: Modifier) {
+    if (page == null) {
         Box(modifier)
         return
     }
-    EInkAsyncImage(model = url, contentDescription = null, modifier = modifier, contentScale = contentScale)
+    EInkAsyncImage(model = page, contentDescription = null, modifier = modifier, contentScale = contentScale)
 }
 
 /* ---------------- continuous (webtoon / strip) ---------------- */
@@ -248,9 +249,9 @@ private fun ContinuousStage(
     val tap = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
     if (vertical) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().then(tap)) {
-            items(items = data.pageUrls) { url ->
+            items(items = data.pages) { page ->
                 EInkAsyncImage(
-                    model = url,
+                    model = page,
                     contentDescription = null,
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.FillWidth,
@@ -259,9 +260,9 @@ private fun ContinuousStage(
         }
     } else {
         LazyRow(state = listState, modifier = Modifier.fillMaxSize().then(tap)) {
-            items(items = data.pageUrls) { url ->
+            items(items = data.pages) { page ->
                 EInkAsyncImage(
-                    model = url,
+                    model = page,
                     contentDescription = null,
                     modifier = Modifier.fillMaxHeight().aspectRatio(2f / 3f),
                     contentScale = ContentScale.FillHeight,

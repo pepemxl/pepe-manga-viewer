@@ -36,9 +36,12 @@ private fun shapesFor(theme: AppTheme): Shapes {
 @Composable
 fun AppThemeProvider(
     theme: AppTheme,
+    imageRenderingOverride: ImageRendering? = null,
     content: @Composable () -> Unit,
 ) {
     val colors = colorsFor(theme)
+    // The override wins; otherwise fall back to whatever the theme prescribes.
+    val effectiveRendering = imageRenderingOverride ?: colors.imageRendering
 
     // Bridge into Material 3 so stock components (TextField, Slider, etc.) inherit the palette.
     val isDark = colors.bg.luminance() < 0.5f
@@ -70,7 +73,10 @@ fun AppThemeProvider(
         )
     }
 
-    CompositionLocalProvider(LocalAppColors provides colors) {
+    CompositionLocalProvider(
+        LocalAppColors provides colors,
+        LocalImageRendering provides effectiveRendering,
+    ) {
         MaterialTheme(
             colorScheme = scheme,
             typography = AppTypography,

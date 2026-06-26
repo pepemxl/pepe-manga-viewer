@@ -17,10 +17,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +45,7 @@ import read.pepe.manga.ui.components.SegOption
 import read.pepe.manga.ui.components.Segmented
 import read.pepe.manga.ui.theme.AppTheme
 import read.pepe.manga.ui.theme.AppTheming
+import read.pepe.manga.ui.theme.ImageRendering
 import read.pepe.manga.ui.theme.colorsFor
 
 @Composable
@@ -71,11 +74,45 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
             AppTheme.entries.forEach { theme ->
                 ThemeRow(theme = theme, selected = s.theme == theme, onClick = { vm.setTheme(theme) })
             }
+
+            Spacer(Modifier.height(2.dp))
+            SectionLabel("Image color")
+            Text(
+                "Override how page art is rendered, independent of the theme — " +
+                    "e.g. keep the mono e-paper look but read pages in full color.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.ink3,
+            )
+            Segmented(
+                options = listOf(
+                    SegOption<ImageRendering?>(null, "Auto"),
+                    SegOption<ImageRendering?>(ImageRendering.FULL_COLOR, "Color"),
+                    SegOption<ImageRendering?>(ImageRendering.GRAYSCALE, "Mono"),
+                    SegOption<ImageRendering?>(ImageRendering.DESATURATE, "Muted"),
+                ),
+                value = s.imageRendering,
+                onChange = vm::setImageRendering,
+            )
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionLabel("Server")
             ServerField(initial = s.baseUrl, onSave = vm::setBaseUrl)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionLabel("Local storage")
+            Text(
+                "Pages are saved here as local_storage/<provider>/<manga>/<chapter>/ " +
+                    "and read from disk before hitting the server.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.ink3,
+            )
+            LocalStorageRow(
+                path = s.localStorageDir,
+                onEdit = { vm.setLocalStorageDir(it) },
+                defaultPath = vm.defaultLocalStorageDir,
+            )
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -139,6 +176,87 @@ private fun SwatchDot(color: androidx.compose.ui.graphics.Color) {
             .clip(CircleShape)
             .background(color)
             .border(1.dp, c.line2, CircleShape),
+    )
+}
+
+@Composable
+private fun LocalStorageRow(path: String, onEdit: (String?) -> Unit, defaultPath: String) {
+    val c = AppTheming.colors
+    var dialogOpen by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(path, style = MaterialTheme.typography.bodyMedium, color = c.ink2)
+            if (path == defaultPath) {
+                Text("Default location", style = MaterialTheme.typography.bodySmall, color = c.ink4)
+            }
+        }
+        PrimaryButton(label = "Change", onClick = { dialogOpen = true })
+    }
+
+    if (dialogOpen) {
+        LocationDialog(
+            initial = path,
+            defaultPath = defaultPath,
+            onDismiss = { dialogOpen = false },
+            onSave = { onEdit(it); dialogOpen = false },
+            onReset = { onEdit(null); dialogOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun LocationDialog(
+    initial: String,
+    defaultPath: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onReset: () -> Unit,
+) {
+    val c = AppTheming.colors
+    var text by rememberSaveable(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("local_storage location") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Absolute folder path where downloaded pages are mirrored. " +
+                        "Use an app-writable location (default works without extra permissions).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.ink3,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = false,
+                    label = { Text("Path") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = c.accentLine,
+                        unfocusedBorderColor = c.line2,
+                        focusedLabelColor = c.accent,
+                        cursorColor = c.accent,
+                        focusedTextColor = c.ink,
+                        unfocusedTextColor = c.ink,
+                    ),
+                )
+                if (text.trim() != defaultPath) {
+                    Text("Default: $defaultPath", style = MaterialTheme.typography.bodySmall, color = c.ink4)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }, enabled = text.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReset) { Text("Reset") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+        containerColor = c.panel,
+        titleContentColor = c.ink,
+        textContentColor = c.ink2,
     )
 }
 

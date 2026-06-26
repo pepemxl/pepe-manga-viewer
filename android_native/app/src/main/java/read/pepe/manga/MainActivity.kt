@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by settingsStore.settings.collectAsStateWithLifecycle(initialValue = null)
             val theme = settings?.theme ?: AppTheme.EPAPER
-            AppThemeProvider(theme = theme) {
+            AppThemeProvider(theme = theme, imageRenderingOverride = settings?.imageRendering) {
                 androidx.compose.foundation.layout.Box(
                     Modifier
                         .fillMaxSize()

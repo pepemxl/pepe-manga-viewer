@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import read.pepe.manga.data.MangaRepository
+import read.pepe.manga.data.local.LocalImageStore
+import read.pepe.manga.data.local.PageRef
 import read.pepe.manga.data.remote.NeighborsDto
 import read.pepe.manga.data.remote.ReaderChapterDto
 import read.pepe.manga.di.ServiceLocator
@@ -19,10 +21,10 @@ import read.pepe.manga.reader.ReadMode
 import read.pepe.manga.ui.common.Loadable
 import read.pepe.manga.ui.common.toMessage
 
-/** Resolved chapter + absolute page URLs + chapter neighbors. */
+/** Resolved chapter + per-page refs (local-first) + chapter neighbors. */
 data class ReaderData(
     val chapter: ReaderChapterDto,
-    val pageUrls: List<String>,
+    val pages: List<PageRef>,
     val neighbors: NeighborsDto?,
 )
 
@@ -55,9 +57,21 @@ class ReaderViewModel(
         viewModelScope.launch {
             runCatching {
                 val ch = repo.readerChapter(chapterId)
-                val urls = ch.pageUrls.map { repo.absoluteUrl(it) }
+                // Series title gives the <manga_name> folder; fall back to its id.
+                val mangaName = runCatching { repo.series(ch.seriesId).title }.getOrNull()
+                    ?.takeIf { it.isNotBlank() } ?: "series_${ch.seriesId}"
+                val pages = ch.pageUrls.mapIndexed { i, p ->
+                    val url = repo.absoluteUrl(p)
+                    PageRef(
+                        url = url,
+                        provider = LocalImageStore.PROVIDER,
+                        manga = mangaName,
+                        chapter = ch.number,
+                        fileName = LocalImageStore.pageFileName(i + 1, url),
+                    )
+                }
                 val neighbors = runCatching { repo.neighbors(ch.seriesId, ch.id) }.getOrNull()
-                ReaderData(ch, urls, neighbors)
+                ReaderData(ch, pages, neighbors)
             }.onSuccess { d ->
                 _data.value = Loadable.Success(d)
                 _page.value = startPage.coerceIn(1, d.chapter.pageCount.coerceAtLeast(1))

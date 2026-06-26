@@ -22,12 +22,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +73,10 @@ private fun SeriesContent(
     onRead: (Int, Int) -> Unit,
 ) {
     val c = AppTheming.colors
+    var ascending by rememberSaveable(series.id) { mutableStateOf(true) }
+    val sortedChapters = remember(series.chapters, ascending) {
+        series.chapters.sortedBy { it.numberSort }.let { if (ascending) it else it.asReversed() }
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp),
@@ -135,16 +144,51 @@ private fun SeriesContent(
 
         item {
             Spacer(Modifier.height(14.dp))
-            SectionLabel("Chapters")
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionLabel("Chapters")
+                SortToggle(ascending = ascending, onToggle = { ascending = !ascending })
+            }
             Spacer(Modifier.height(6.dp))
         }
 
-        items(series.chapters, key = { it.id }) { ch ->
+        items(sortedChapters, key = { it.id }) { ch ->
             ChapterRow(ch = ch, onClick = {
                 val page = if (ch.progressPage > 0) ch.progressPage else 1
                 onRead(ch.id, page)
             })
         }
+    }
+}
+
+@Composable
+private fun SortToggle(ascending: Boolean, onToggle: () -> Unit) {
+    val c = AppTheming.colors
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(c.panel)
+            .border(1.dp, c.line, RoundedCornerShape(8.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.SwapVert,
+            contentDescription = "Invert chapter order",
+            tint = c.ink3,
+            modifier = Modifier.width(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            if (ascending) "Oldest first" else "Newest first",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = c.ink3,
+        )
     }
 }
 

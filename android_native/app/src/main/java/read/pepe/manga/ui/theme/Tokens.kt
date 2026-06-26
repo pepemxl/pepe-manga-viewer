@@ -24,7 +24,16 @@ enum class AppTheme(val key: String, val label: String) {
 }
 
 /** How reader/cover images are filtered to emulate the panel hardware. */
-enum class ImageRendering { FULL_COLOR, GRAYSCALE, DESATURATE }
+enum class ImageRendering(val key: String, val label: String) {
+    FULL_COLOR("color", "Full color"),
+    GRAYSCALE("grayscale", "Monochrome"),
+    DESATURATE("muted", "Muted color");
+
+    companion object {
+        /** Resolves a stored override key; `null`/unknown means "follow the theme". */
+        fun fromKey(key: String?): ImageRendering? = entries.firstOrNull { it.key == key }
+    }
+}
 
 /**
  * Design tokens. Field names map 1:1 to the CSS custom properties:
@@ -194,3 +203,11 @@ fun colorsFor(theme: AppTheme): AppColors = when (theme) {
 }
 
 val LocalAppColors = staticCompositionLocalOf { EpaperColors }
+
+/**
+ * The *effective* image rendering, decoupled from the theme. Defaults to the
+ * theme's own [AppColors.imageRendering] but can be overridden by the user's
+ * preference (see [AppThemeProvider]). This lets the e-paper UI stay monochrome
+ * while page art is shown in color, and vice-versa.
+ */
+val LocalImageRendering = staticCompositionLocalOf { ImageRendering.GRAYSCALE }
