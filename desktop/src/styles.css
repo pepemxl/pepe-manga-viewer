@@ -397,13 +397,19 @@ button { font: inherit; cursor: pointer; }
   user-select: none; -webkit-user-drag: none;
   background: var(--panel);
 }
-.reader-stage.vertical { align-items: flex-start; overflow-y: auto; }
+/* Paged modes: allow scrolling when zoomed in; margin:auto keeps the page
+   centred while staying fully scrollable once it overflows (unlike
+   justify/align-center, which would clip the top/left and trap it). */
+.reader-stage.single { overflow: auto; }
+.reader-stage.single img.page { margin: auto; }
+.reader-stage.double { overflow: auto; }
+.reader-stage.vertical { align-items: flex-start; overflow: auto; }
 .reader-stage.vertical .strip { display: flex; flex-direction: column; align-items: center; margin: 0 auto; }
 .reader-stage.vertical .strip img.page { width: 100%; height: auto; display: block; }
-.reader-stage.horizontal { overflow-x: auto; justify-content: flex-start; }
+.reader-stage.horizontal { overflow: auto; justify-content: flex-start; }
 .reader-stage.horizontal .strip { display: flex; gap: 8px; height: 100%; align-items: center; padding: 0 12px; }
 .reader-stage.horizontal .strip img.page { height: 100%; width: auto; flex: 0 0 auto; }
-.reader-stage.double .pair { display: flex; gap: 4px; height: 100%; align-items: center; justify-content: center; }
+.reader-stage.double .pair { display: flex; gap: 4px; height: 100%; align-items: center; justify-content: center; margin: auto; }
 .reader-stage.double .pair img.page { max-height: 100%; }
 
 .tap-zone { position: absolute; top: 0; bottom: 0; z-index: 3; }

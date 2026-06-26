@@ -76,6 +76,7 @@ npm run tauri:dev    # native window; defaults to http://localhost:8202
 - `B` bookmark
 - `M` cycle reading mode
 - `G` go to page
+- `+ / -` zoom in / out · `0` reset zoom
 
 ## Project layout
 

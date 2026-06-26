@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 import { setApiBase } from './api.js';
+import { allowStorage, defaultStorageRoot, isDesktop } from './cache.js';
 import { applyTheme } from './theme.js';
 
 // Local, device-side preferences — the desktop analogue of android_native's
@@ -18,6 +19,9 @@ const DEFAULTS = {
   defaultMode: 'single',
   defaultDirection: 'RTL',
   defaultFit: 'height',
+  // Root folder for the on-disk page cache (desktop only). Empty ⇒ fall back to
+  // the app-data default, resolved lazily on first run.
+  storageRoot: '',
 };
 
 function load() {
@@ -41,6 +45,22 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
   }, [settings]);
+
+  // Resolve a concrete cache root on desktop (defaulting to app-data on first
+  // run) and grant the asset protocol read access to it whenever it changes.
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    (async () => {
+      let root = settings.storageRoot;
+      if (!root) {
+        root = await defaultStorageRoot();
+        if (root && !cancelled) setSettings((s) => ({ ...s, storageRoot: root }));
+      }
+      if (root) await allowStorage(root);
+    })();
+    return () => { cancelled = true; };
+  }, [settings.storageRoot]);
 
   const value = useMemo(() => ({
     settings,

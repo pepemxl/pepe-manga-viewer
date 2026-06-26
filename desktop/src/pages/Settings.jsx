@@ -2,6 +2,9 @@ import { useState } from 'react';
 
 import { PrimaryButton, SectionLabel, Segmented, Mono } from '../components/ui.jsx';
 import { api } from '../lib/api.js';
+import {
+  allowStorage, chooseStorageDir, defaultStorageRoot, isDesktop,
+} from '../lib/cache.js';
 import { DIRECTIONS, FITS, MODES } from '../lib/reader.js';
 import { useSettings } from '../lib/settings.jsx';
 import { RENDERINGS, THEMES } from '../lib/theme.js';
@@ -19,6 +22,19 @@ export default function Settings() {
     setProbe('checking…');
     try { await api.health(); setProbe('reachable ✓'); }
     catch { setProbe('saved — but no response yet'); }
+  }
+
+  async function pickStorage() {
+    const chosen = await chooseStorageDir(settings.storageRoot);
+    if (!chosen) return;
+    set({ storageRoot: chosen });
+    await allowStorage(chosen);
+  }
+
+  async function resetStorage() {
+    const def = await defaultStorageRoot();
+    set({ storageRoot: def });
+    await allowStorage(def);
   }
 
   return (
@@ -66,6 +82,25 @@ export default function Settings() {
         {dirty && <Mono size={12} color="var(--ink-4)">Click Save to switch servers.</Mono>}
         {!dirty && probe && <Mono size={12} color="var(--ink-4)">{probe}</Mono>}
       </section>
+
+      {/* Local storage (desktop only) */}
+      {isDesktop() && (
+        <section className="col" style={{ gap: 10 }}>
+          <SectionLabel>Local storage</SectionLabel>
+          <p style={{ color: 'var(--ink-3)', margin: 0 }}>
+            Pages you read are cached on disk and loaded from there next time —
+            so re-reads are instant and work offline. Stored under
+            {' '}<Mono size={12}>&lt;folder&gt;/pepe_manga_server/&lt;manga&gt;/chapter_&lt;n&gt;/</Mono>.
+          </p>
+          <div className="field" style={{ overflowWrap: 'anywhere', userSelect: 'text' }}>
+            {settings.storageRoot || 'resolving default…'}
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <PrimaryButton label="Choose folder…" glyph="📁" onClick={pickStorage} />
+            <PrimaryButton label="Use default" primary={false} onClick={resetStorage} />
+          </div>
+        </section>
+      )}
 
       {/* Reading defaults */}
       <section className="col" style={{ gap: 10 }}>

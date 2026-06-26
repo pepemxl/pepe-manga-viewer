@@ -17,8 +17,9 @@ image-rendering filters, and the full reader UX.
 | Series          | Hero, resume/read, chapter list with sort toggle and per-chapter progress       |
 | Reader          | `single` · `double` (RTL-aware spread) · `vertical` (webtoon) · `horizontal` (strip); RTL/LTR; fit height/width/original; auto-hiding chrome; click-zones; page scrubber; chapter neighbors |
 | Reading         | Month stats, 30-day bars, continue-reading list                                 |
-| Settings        | Display panel, image color, server URL, default reading mode/direction/fit      |
+| Settings        | Display panel, image color, server URL, **local storage folder**, default reading mode/direction/fit |
 | Add             | Server-side import guidance + register source folder + re-scan                  |
+| Offline cache   | Pages read are cached on disk and reloaded from there next time (desktop only)   |
 
 The default mode/direction/fit and the per-series reader config are persisted to
 the backend exactly like the web frontend (`PATCH /api/series/{id}/reader-config`).
@@ -49,6 +50,28 @@ backend, unlike the Android emulator's `10.0.2.2`). Change it any time in
 **Settings → Server**; it's stored in the webview's `localStorage`. The backend
 sets `CORS allow_origins=["*"]`, so the webview can reach it cross-origin.
 
+## Local storage (offline page cache)
+
+The desktop build caches page images on disk so re-reads are instant and work
+offline. As you read, each page is downloaded once and written under:
+
+```
+<storage root>/pepe_manga_server/<manga name>/chapter_0001/<page>.<ext>
+```
+
+`pepe_manga_server` is the provider id for the bundled FastAPI backend. The
+reader checks the cache first and only falls back to the network for pages it
+hasn't seen yet (which it then caches in the background).
+
+Pick the cache root in **Settings → Local storage → Choose folder…** (a native
+folder picker). It defaults to `<app data>/local_storage`; **Use default**
+restores that. The chosen path is persisted in the webview's `localStorage`, and
+the Rust shell grants the `asset:` protocol read access to it so cached files
+render in the reader.
+
+This is a desktop-only feature — the `npm run dev` web preview has no filesystem
+access and always streams from the backend.
+
 ## Layout
 
 ```
@@ -56,7 +79,7 @@ src/
   lib/        api client, theme tokens, reader model, settings store
   components/  shared UI primitives (CoverArt, Segmented, StateHost, …)
   pages/       Library · Series · Reader · Dashboard · Settings · Add
-src-tauri/    Rust shell (thin — just hosts the webview), tauri.conf.json, icons
+src-tauri/    Rust shell (hosts the webview + on-disk page cache commands), tauri.conf.json, icons
 ```
 
 ## Keyboard shortcuts (reader)
@@ -64,3 +87,4 @@ src-tauri/    Rust shell (thin — just hosts the webview), tauri.conf.json, ico
 - `← / →` page prev / next (direction-aware)
 - `shift + ← / →` chapter prev / next
 - `space` next page · `M` cycle mode · `F` fullscreen · `B` bookmark · `Esc` back to series
+- `+` / `-` zoom in / out · `0` reset zoom (also in the ⚙ reading-settings panel)

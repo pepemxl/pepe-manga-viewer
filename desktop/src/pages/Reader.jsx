@@ -1,12 +1,68 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { IconBox, Mono, SectionLabel, Segmented } from '../components/ui.jsx';
 import { api, pageUrl } from '../lib/api.js';
+import { cachedPageSrc, chapterFolder, ensureCached, isDesktop } from '../lib/cache.js';
 import { DIRECTIONS, FITS, MODES, isContinuous, normalizeDir } from '../lib/reader.js';
 import { useSettings } from '../lib/settings.jsx';
 
 const HIDE_MS = 2800;
+
+// Zoom bounds (a subset of the backend's [0.25, 4.0] range) and step.
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+const clampZoom = (z) =>
+  Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z / ZOOM_STEP) * ZOOM_STEP));
+
+/**
+ * Page image URLs for a chapter. Starts with backend URLs, then (on desktop)
+ * swaps in `asset:` URLs for already-cached pages and kicks off background
+ * caching for the rest — so the network is only hit the first time a page is read.
+ */
+function usePageSrcs(ch, storageRoot) {
+  const [srcs, setSrcs] = useState([]);
+  useEffect(() => {
+    if (!ch) { setSrcs([]); return; }
+    const count = ch.page_count || 0;
+    const base = Array.from({ length: count }, (_, i) => pageUrl(ch.id, i));
+    setSrcs(base);
+    if (!isDesktop() || !storageRoot) return undefined;
+
+    let cancelled = false;
+    const chapter = chapterFolder(ch.number);
+    (async () => {
+      // Cache folder = the manga's name. Prefer the title in the reader payload,
+      // fall back to the series record (always has a title), and only use the id
+      // as a last resort.
+      let manga = ch.series_title;
+      if (!manga) {
+        try { manga = (await api.series(ch.series_id))?.title; } catch { /* ignore */ }
+      }
+      if (cancelled) return;
+      if (!manga) manga = `series_${ch.series_id}`;
+
+      for (let i = 0; i < count; i++) {
+        if (cancelled) return;
+        const local = await cachedPageSrc({ root: storageRoot, manga, chapter, page: i });
+        if (cancelled) return;
+        if (local) {
+          setSrcs((prev) => {
+            if (prev[i] === local) return prev;
+            const next = [...prev];
+            next[i] = local;
+            return next;
+          });
+        } else {
+          ensureCached({ root: storageRoot, manga, chapter, page: i, url: base[i] });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ch, storageRoot]);
+  return srcs;
+}
 
 /** Double-spread slot indices (0-based, -1 = blank), ported from ReaderScreen.kt. */
 function spreadIndices(page, total, rtl) {
@@ -30,6 +86,7 @@ export default function Reader() {
   const [mode, setMode] = useState(settings.defaultMode);
   const [dir, setDir] = useState(settings.defaultDirection);
   const [fit, setFit] = useState(settings.defaultFit);
+  const [zoom, setZoom] = useState(1);
   const [chrome, setChrome] = useState(true);
   const [panel, setPanel] = useState(false);
   const [toast, setToast] = useState('');
@@ -38,6 +95,7 @@ export default function Reader() {
   const skipCfgSave = useRef(false);
   const cfgTimer = useRef(null);
   const progTimer = useRef(null);
+  const toastTimer = useRef(null);
 
   // ── load chapter (+ neighbors), then resolve mode/dir/fit ──────────────
   useEffect(() => {
@@ -57,6 +115,7 @@ export default function Reader() {
         ? normalizeDir(info.direction)
         : (settings.defaultDirection || 'RTL'));
       setFit(info.fit || settings.defaultFit || 'height');
+      setZoom(info.zoom && info.zoom > 0 ? clampZoom(info.zoom) : 1);
 
       try {
         const nb = await api.neighbors(info.series_id, info.id);
@@ -72,10 +131,10 @@ export default function Reader() {
     if (skipCfgSave.current) { skipCfgSave.current = false; return; }
     clearTimeout(cfgTimer.current);
     cfgTimer.current = setTimeout(() => {
-      api.setReaderConfig(ch.series_id, { reading_mode: mode, direction: dir, fit }).catch(() => {});
+      api.setReaderConfig(ch.series_id, { reading_mode: mode, direction: dir, fit, zoom }).catch(() => {});
     }, 400);
     return () => clearTimeout(cfgTimer.current);
-  }, [ch, mode, dir, fit]);
+  }, [ch, mode, dir, fit, zoom]);
 
   // ── report progress (debounced) ────────────────────────────────────────
   useEffect(() => {
@@ -122,6 +181,22 @@ export default function Reader() {
     if (t) nav(`/read/${t}`);
   }, [neighbors, nav]);
 
+  const flashToast = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 1200);
+  }, []);
+
+  // Zoom by a delta (keyboard / buttons); `null` resets to 100%.
+  const changeZoom = useCallback((delta) => {
+    setZoom((z) => {
+      const next = delta === null ? 1 : clampZoom(z + delta);
+      flashToast(`${Math.round(next * 100)}%`);
+      return next;
+    });
+    bump();
+  }, [flashToast, bump]);
+
   // ── keyboard + mouse ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
@@ -139,6 +214,9 @@ export default function Reader() {
           else document.exitFullscreen?.();
           break;
         case 'b': case 'B': setToast('bookmark added'); setTimeout(() => setToast(''), 1400); break;
+        case '+': case '=': e.preventDefault(); changeZoom(ZOOM_STEP); break;
+        case '-': case '_': e.preventDefault(); changeZoom(-ZOOM_STEP); break;
+        case '0': e.preventDefault(); changeZoom(null); break;
         default: break;
       }
     };
@@ -146,12 +224,9 @@ export default function Reader() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('mousemove', onMove);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousemove', onMove); };
-  }, [advance, goChapter, dir, ch, nav, bump]);
+  }, [advance, goChapter, dir, ch, nav, bump, changeZoom]);
 
-  const pages = useMemo(
-    () => (ch ? Array.from({ length: ch.page_count }, (_, i) => pageUrl(ch.id, i)) : []),
-    [ch],
-  );
+  const pages = usePageSrcs(ch, settings.storageRoot);
 
   if (!ch) {
     return <div className="reader"><div className="state">loading chapter…</div></div>;
@@ -164,7 +239,7 @@ export default function Reader() {
 
   return (
     <div className={`reader${chrome ? '' : ' hide'}`}>
-      <Stage mode={mode} dir={dir} fit={fit} pages={pages} page={page} onPage={goTo} onTap={() => setChrome((c) => !c)} />
+      <Stage mode={mode} dir={dir} fit={fit} zoom={zoom} pages={pages} page={page} onPage={goTo} onTap={() => setChrome((c) => !c)} />
 
       {/* paging tap zones (paged modes only) */}
       {!cont && (
@@ -218,6 +293,15 @@ export default function Reader() {
               options={FITS.map((f) => ({ value: f.key, label: f.label, glyph: f.glyph }))}
               value={fit} onChange={setFit} />
           </div>
+          <div className="col" style={{ gap: 8 }}>
+            <SectionLabel>Zoom</SectionLabel>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <IconBox glyph="−" title="Zoom out" onClick={() => changeZoom(-ZOOM_STEP)} />
+              <span className="pill" style={{ minWidth: 56, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+              <IconBox glyph="+" title="Zoom in" onClick={() => changeZoom(ZOOM_STEP)} />
+              <button type="button" className="chip" onClick={() => changeZoom(null)}>Reset</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -247,11 +331,17 @@ function fitStyle(fit) {
   return { maxWidth: 'none', maxHeight: 'none' }; // original
 }
 
-function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
+function Stage({ mode, dir, fit, zoom = 1, pages, page, onPage, onTap }) {
   const rtl = dir === 'RTL';
   const scrollRef = useRef(null);
+  // Latest page in a ref (the scroll listener's closure is otherwise stale) +
+  // a flag marking page changes that originate from scrolling, so the scrub
+  // effect below doesn't fight the user's own scroll.
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const fromScroll = useRef(false);
 
-  // continuous modes: report page from scroll + scroll to page on scrub
+  // continuous modes: report page from scroll
   useEffect(() => {
     if (mode !== 'vertical' && mode !== 'horizontal') return;
     const el = scrollRef.current;
@@ -266,15 +356,20 @@ function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
         const pos = vertical ? r.top : r.left;
         if (pos <= (vertical ? window.innerHeight : window.innerWidth) * 0.4) idx = i;
       }
-      onPage(idx + 1);
+      const next = idx + 1;
+      if (next === pageRef.current) return;   // no real change ⇒ don't flag
+      fromScroll.current = true;               // suppress the scrub-back below
+      onPage(next);
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, [mode, onPage]);
 
-  // scrub → scroll
+  // scrub → scroll: only for *external* page changes (slider, keys, neighbors),
+  // never when the page changed because the user scrolled there themselves.
   useEffect(() => {
     if (mode !== 'vertical' && mode !== 'horizontal') return;
+    if (fromScroll.current) { fromScroll.current = false; return; }
     const el = scrollRef.current;
     const target = el?.querySelectorAll('img.page')[page - 1];
     if (target) target.scrollIntoView({ block: 'start', inline: 'start' });
@@ -283,7 +378,7 @@ function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
   if (mode === 'vertical') {
     return (
       <div className="reader-stage vertical" ref={scrollRef} onClick={onTap}>
-        <div className="strip" style={{ width: 720, maxWidth: '100%' }}>
+        <div className="strip" style={{ width: 720, maxWidth: '100%', zoom }}>
           {pages.map((src, i) => <img key={i} className="page" src={src} alt={`page ${i + 1}`} loading="lazy" />)}
         </div>
       </div>
@@ -293,7 +388,7 @@ function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
     const ordered = rtl ? pages.map((_, i) => pages[pages.length - 1 - i]) : pages;
     return (
       <div className="reader-stage horizontal" ref={scrollRef} onClick={onTap}>
-        <div className="strip">
+        <div className="strip" style={{ zoom }}>
           {ordered.map((src, i) => <img key={i} className="page" src={src} alt={`page ${i + 1}`} loading="lazy" />)}
         </div>
       </div>
@@ -303,7 +398,7 @@ function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
     const [l, r] = spreadIndices(page, pages.length, rtl);
     return (
       <div className="reader-stage double">
-        <div className="pair">
+        <div className="pair" style={{ zoom }}>
           {[l, r].map((idx, i) =>
             idx >= 0 && pages[idx]
               ? <img key={i} className="page" src={pages[idx]} style={fitStyle(fit)} alt={`page ${idx + 1}`} />
@@ -316,7 +411,7 @@ function Stage({ mode, dir, fit, pages, page, onPage, onTap }) {
   // single
   return (
     <div className="reader-stage single">
-      <img className="page" src={pages[page - 1]} style={fitStyle(fit)} alt={`page ${page}`} />
+      <img className="page" src={pages[page - 1]} style={{ ...fitStyle(fit), zoom }} alt={`page ${page}`} />
     </div>
   );
 }

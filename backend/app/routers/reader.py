@@ -17,6 +17,7 @@ def chapter_info(chapter_id: int, db: Session = Depends(get_db)):
     s = db.query(models.Series).get(c.series_id)
     return {
         "id": c.id, "series_id": c.series_id, "number": c.number, "title": c.title,
+        "series_title": s.title if s else None,
         "page_count": len(pages),
         "page_urls": [f"/api/reader/page/{c.id}/{i}" for i in range(len(pages))],
         "current_page": p.page if p else 1,
