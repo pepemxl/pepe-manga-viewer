@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mono e-ink book mark, echoing the design's bundler thumbnail -->
+    <path android:fillColor="#141414"
+        android:pathData="M38,32h32a3,3 0 0 1 3,3v41a3,3 0 0 1 -3,3h-32a3,3 0 0 1 -3,-3v-41a3,3 0 0 1 3,-3z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M38,32h15v47h-15z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2.5" android:fillColor="#00000000"
+        android:pathData="M54,46 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+</vector>
