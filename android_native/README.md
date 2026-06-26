@@ -1,8 +1,7 @@
 # Pepe Manga — native Android reader
 
 A native **Kotlin / Jetpack Compose** e-paper manga reader. It ports the
-claude.ai/design project **"Manga Viewer V2"** (file `Manga Reader.html`,
-imported via the `claude_design` MCP — see [`design-reference/DESIGN.md`](design-reference/DESIGN.md))
+claude.ai/design project **"Manga Viewer V2"** ee [`design-reference/DESIGN.md`](design-reference/DESIGN.md))
 and consumes the existing FastAPI backend in [`../backend`](../backend). No
 backend logic is reimplemented here — the app is a pure frontend client.
 
