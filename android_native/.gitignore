@@ -11,3 +11,8 @@ local.properties
 /app/build/
 gradle/wrapper/gradle-wrapper.jar
 .kotlin/
+
+# Release signing — never commit the keystore or its credentials.
+keystore.properties
+*.jks
+*.keystore

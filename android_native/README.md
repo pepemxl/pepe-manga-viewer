@@ -49,7 +49,16 @@ cd android_native
 # point Gradle at your SDK (only needed if not already set)
 echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 ./gradlew assembleDebug          # → app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease        # → app/build/outputs/apk/release/ (signed if a keystore is set; see below)
+./gradlew bundleRelease          # → app/build/outputs/bundle/release/app-release.aab (Play Store)
 ./gradlew installDebug           # to a connected device / emulator
+```
+
+From the repo root you can also use the Makefile shortcuts:
+
+```bash
+make android-apk                 # release APK (unsigned)
+make android-apk-debug           # debug APK
 ```
 
 Default backend URL is `http://10.0.2.2:8202` (the host loopback from the
@@ -59,3 +68,38 @@ allowed via `res/xml/network_security_config.xml`.
 
 Verified: `assembleDebug` and `assembleRelease` (R8 + lint-vital) both pass with
 JDK 17, AGP 8.7.3, Gradle 8.11.1, compileSdk 35.
+
+## Release signing
+
+`assembleRelease` is signed when a keystore is configured, and falls back to an
+unsigned APK otherwise. Credentials are read from `keystore.properties` (in this
+folder, git-ignored) or, for CI, the matching environment variables
+(`ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`).
+
+One-time setup (from the repo root):
+
+```bash
+make android-keystore            # generates release.jks + keystore.properties
+#                                  override defaults: make android-keystore KEY_STOREPASS=… KEY_ALIAS=…
+make android-apk                 # → app/build/outputs/apk/release/app-release.apk (signed)
+make android-aab                 # → app/build/outputs/bundle/release/app-release.aab (signed; Play Store)
+```
+
+The same signing config applies to both, so `make android-aab` (Gradle's
+`bundleRelease`) produces a signed App Bundle with no extra setup — that's the
+format you upload to Google Play.
+
+Or by hand:
+
+```bash
+cd android_native
+keytool -genkeypair -v -keystore release.jks -alias pepe-manga \
+    -keyalg RSA -keysize 2048 -validity 10000
+cp keystore.properties.example keystore.properties   # then edit the values
+./gradlew assembleRelease
+```
+
+`storeFile` may be absolute or relative to `android_native/`. The keystore and
+`keystore.properties` are git-ignored — **never commit them**, and keep a backup
+of the keystore (losing it means you can't ship updates under the same identity).

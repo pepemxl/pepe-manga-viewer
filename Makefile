@@ -12,6 +12,15 @@ DB_USER       := pepe-manga
 DB_PASS       := pepe-mangapass
 DB_NAME       := pepe-manga
 
+ANDROID_DIR   := android_native
+
+# Release-signing keystore generation (override any KEY_* on the command line).
+KEYSTORE      ?= $(ANDROID_DIR)/release.jks
+KEY_ALIAS     ?= pepe-manga
+KEY_STOREPASS ?= changeit
+KEY_KEYPASS   ?= $(KEY_STOREPASS)
+KEY_DNAME     ?= CN=pepe-manga, OU=dev, O=pepe-manga, C=MX
+
 # ── meta ─────────────────────────────────────────────────────────────────
 .PHONY: help
 help: ## show this help
@@ -134,6 +143,33 @@ be-dev:        ## run backend on host (uses .venv); requires a reachable mysql
 	  DATABASE_URL=mysql+pymysql://$(DB_USER):$(DB_PASS)@localhost:8203/$(DB_NAME) \
 	  MANGA_ROOT=$$PWD/sample_manga \
 	  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# ── android ──────────────────────────────────────────────────────────────
+.PHONY: android-apk android-aab android-apk-debug android-keystore
+android-keystore:  ## generate a release keystore + keystore.properties (override KEY_* vars)
+	@test ! -f $(KEYSTORE) || { echo ">>> $(KEYSTORE) already exists — refusing to overwrite"; exit 1; }
+	keytool -genkeypair -v -keystore $(KEYSTORE) -alias $(KEY_ALIAS) \
+	  -keyalg RSA -keysize 2048 -validity 10000 \
+	  -storepass $(KEY_STOREPASS) -keypass $(KEY_KEYPASS) -dname "$(KEY_DNAME)"
+	@printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+	  "$(notdir $(KEYSTORE))" "$(KEY_STOREPASS)" "$(KEY_ALIAS)" "$(KEY_KEYPASS)" \
+	  > $(ANDROID_DIR)/keystore.properties
+	@echo ">>> wrote $(ANDROID_DIR)/keystore.properties (git-ignored) — release builds will now be signed"
+
+android-apk:       ## build a release APK of android_native (signed if a keystore is configured)
+	cd $(ANDROID_DIR) && ./gradlew assembleRelease
+	@echo ">>> APK(s) in $(ANDROID_DIR)/app/build/outputs/apk/release/:"
+	@ls -1 $(ANDROID_DIR)/app/build/outputs/apk/release/*.apk
+
+android-aab:       ## build a release App Bundle (.aab) of android_native (signed if a keystore is configured)
+	cd $(ANDROID_DIR) && ./gradlew bundleRelease
+	@echo ">>> AAB(s) in $(ANDROID_DIR)/app/build/outputs/bundle/release/:"
+	@ls -1 $(ANDROID_DIR)/app/build/outputs/bundle/release/*.aab
+
+android-apk-debug: ## build a debug APK of android_native
+	cd $(ANDROID_DIR) && ./gradlew assembleDebug
+	@echo ">>> APK(s) in $(ANDROID_DIR)/app/build/outputs/apk/debug/:"
+	@ls -1 $(ANDROID_DIR)/app/build/outputs/apk/debug/*.apk
 
 # ── verify ───────────────────────────────────────────────────────────────
 .PHONY: verify py-check
