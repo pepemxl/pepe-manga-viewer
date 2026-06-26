@@ -1,0 +1,20 @@
+[package]
+name = "pepe-manga-desktop"
+version = "0.1.0"
+description = "Desktop manga / manhwa / comic reader — Tauri shell for the React UI."
+authors = ["pepe-manga"]
+edition = "2021"
+rust-version = "1.77"
+
+# The library the Tauri binary (and mobile targets) link against.
+[lib]
+name = "pepe_manga_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
