@@ -91,54 +91,73 @@ class LocalLibrary(private val settings: SettingsStore) {
 
         val chapters = mutableListOf<LocalChapter>()
         val skipped = mutableListOf<String>()
-        val looseImages = mutableListOf<DocumentFile>()
-
-        for (child in tree.listFiles().sortedBy { it.name ?: "" }) {
-            val name = child.name ?: continue
-            when {
-                child.isDirectory -> {
-                    val cid = LocalImageStore.sanitize(name)
-                    val pages = copyImageDir(context, child, File(seriesDir, cid))
-                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, name, name, pages)
-                }
-                isArchive(name) -> {
-                    val stem = name.substringBeforeLast('.')
-                    val cid = LocalImageStore.sanitize(stem)
-                    val pages = extractZip(context, child.uri, File(seriesDir, cid), context.cacheDir)
-                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
-                }
-                isPdf(name) -> {
-                    val stem = name.substringBeforeLast('.')
-                    val cid = LocalImageStore.sanitize(stem)
-                    val pages = extractPdf(context, child.uri, File(seriesDir, cid))
-                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
-                }
-                isRar(name) -> {
-                    val stem = name.substringBeforeLast('.')
-                    val cid = LocalImageStore.sanitize(stem)
-                    val pages = runCatching { extractRar(context, child.uri, File(seriesDir, cid), context.cacheDir) }
-                        .getOrElse { emptyList() }
-                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages) else skipped += name
-                }
-                isImage(name) -> looseImages += child
-            }
-        }
-
-        if (looseImages.isNotEmpty()) {
-            val pages = copyDocs(context, looseImages, File(seriesDir, "chapter"))
-            if (pages.isNotEmpty()) chapters += LocalChapter("chapter", title, "1", pages)
-        }
+        collect(context, tree, "", seriesDir, 0, chapters, skipped)
+        chapters.sortBy { it.number }
 
         if (chapters.isEmpty()) {
             throw IllegalStateException(
-                if (skipped.isEmpty()) "No readable images found in that folder."
-                else "Only unsupported files found (${skipped.joinToString()}). CBR/PDF aren't supported yet."
+                if (skipped.isEmpty())
+                    "No readable books or images found in that folder " +
+                        "(looked for .cbz/.zip/.cbr/.rar/.pdf and image folders)."
+                else "Couldn't read any pages from: ${skipped.joinToString()}."
             )
         }
 
         val series = LocalSeries(seriesId, title, chapters, skipped)
         save(listOf(series) + list().filter { it.id != seriesId })
         series
+    }
+
+    /**
+     * Recursively scan a tree for chapters: a folder of images is one chapter;
+     * each archive / PDF at any depth is a chapter. Handles both a flat folder of
+     * books and one with a sub-folder per book.
+     */
+    private fun collect(
+        context: Context,
+        dir: DocumentFile,
+        prefix: String,
+        seriesDir: File,
+        depth: Int,
+        chapters: MutableList<LocalChapter>,
+        skipped: MutableList<String>,
+    ) {
+        if (depth > 8) return
+        val files = dir.listFiles().sortedBy { it.name ?: "" }
+
+        val images = files.filter { it.isFile && isImage(it.name ?: "") }
+        if (images.isNotEmpty()) {
+            val cid = prefix.ifBlank { "chapter" }
+            val name = dir.name ?: "chapter"
+            val pages = copyDocs(context, images, File(seriesDir, cid))
+            if (pages.isNotEmpty()) chapters += LocalChapter(cid, name, name, pages)
+            return
+        }
+
+        for (child in files) {
+            val name = child.name ?: continue
+            if (child.isDirectory) {
+                collect(context, child, joinId(prefix, name), seriesDir, depth + 1, chapters, skipped)
+                continue
+            }
+            val stem = name.substringBeforeLast('.')
+            val cid = joinId(prefix, stem)
+            when {
+                isArchive(name) -> {
+                    val pages = extractZip(context, child.uri, File(seriesDir, cid), context.cacheDir)
+                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
+                }
+                isRar(name) -> {
+                    val pages = runCatching { extractRar(context, child.uri, File(seriesDir, cid), context.cacheDir) }
+                        .getOrElse { emptyList() }
+                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages) else skipped += name
+                }
+                isPdf(name) -> {
+                    val pages = extractPdf(context, child.uri, File(seriesDir, cid))
+                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
+                }
+            }
+        }
     }
 
     // ── extraction helpers ──────────────────────────────────────────────────
@@ -222,11 +241,6 @@ class LocalLibrary(private val settings: SettingsStore) {
         }
     }
 
-    private fun copyImageDir(context: Context, dir: DocumentFile, outDir: File): List<String> {
-        val images = dir.listFiles().filter { it.isFile && isImage(it.name ?: "") }.sortedBy { it.name ?: "" }
-        return copyDocs(context, images, outDir)
-    }
-
     private fun copyDocs(context: Context, docs: List<DocumentFile>, outDir: File): List<String> {
         if (docs.isEmpty()) return emptyList()
         outDir.mkdirs()
@@ -258,6 +272,12 @@ class LocalLibrary(private val settings: SettingsStore) {
         }
 
         fun shortHash(s: String): String = Integer.toHexString(s.hashCode())
+
+        /** Combine a sanitized path prefix with a name for a unique chapter id. */
+        fun joinId(prefix: String, name: String): String {
+            val s = LocalImageStore.sanitize(name)
+            return if (prefix.isBlank()) s else "${prefix}_$s"
+        }
 
         val IMAGE_EXTS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "avif")
     }
