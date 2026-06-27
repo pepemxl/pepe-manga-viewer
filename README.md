@@ -87,4 +87,13 @@ android_native/  native Kotlin / Jetpack Compose Android client
 desktop/         React + Vite + Tauri desktop client
 mysql/init       MySQL schema bootstrap
 Makefile         common dev workflows (`make help`)
+make.bat         Windows equivalent of the Makefile (`make help`, `make android-apk`, …)
+```
+
+On Windows (no `make` installed), use the bundled `make.bat` from the repo root —
+it mirrors the Makefile targets:
+
+```bat
+make help
+make android-apk
 ```
