@@ -1,6 +1,9 @@
 package read.pepe.manga.data.local
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +106,12 @@ class LocalLibrary(private val settings: SettingsStore) {
                     val pages = extractZip(context, child.uri, File(seriesDir, cid), context.cacheDir)
                     if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
                 }
+                isPdf(name) -> {
+                    val stem = name.substringBeforeLast('.')
+                    val cid = LocalImageStore.sanitize(stem)
+                    val pages = extractPdf(context, child.uri, File(seriesDir, cid))
+                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
+                }
                 isUnsupported(name) -> skipped += name
                 isImage(name) -> looseImages += child
             }
@@ -154,6 +163,34 @@ class LocalLibrary(private val settings: SettingsStore) {
         }
     }
 
+    /** Render a PDF's pages to JPEGs with the platform [PdfRenderer] (no extra deps). */
+    private fun extractPdf(context: Context, uri: Uri, outDir: File): List<String> {
+        val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: return emptyList()
+        pfd.use {
+            PdfRenderer(it).use { renderer ->
+                if (renderer.pageCount == 0) return emptyList()
+                outDir.mkdirs()
+                val names = mutableListOf<String>()
+                for (i in 0 until renderer.pageCount) {
+                    renderer.openPage(i).use { page ->
+                        // ~150 dpi (page dimensions are in 1/72") for legible text.
+                        val scale = 2
+                        val bmp = Bitmap.createBitmap(page.width * scale, page.height * scale, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(Color.WHITE) // PDFs assume a white page
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        val fileName = "page_%04d.jpg".format(i + 1)
+                        File(outDir, fileName).outputStream().use { os ->
+                            bmp.compress(Bitmap.CompressFormat.JPEG, 85, os)
+                        }
+                        bmp.recycle()
+                        names += fileName
+                    }
+                }
+                return names
+            }
+        }
+    }
+
     private fun copyImageDir(context: Context, dir: DocumentFile, outDir: File): List<String> {
         val images = dir.listFiles().filter { it.isFile && isImage(it.name ?: "") }.sortedBy { it.name ?: "" }
         return copyDocs(context, images, outDir)
@@ -179,8 +216,10 @@ class LocalLibrary(private val settings: SettingsStore) {
             name.substringAfterLast('.', "").lowercase() in IMAGE_EXTS
         fun isArchive(name: String): Boolean =
             name.substringAfterLast('.', "").lowercase() in setOf("cbz", "zip")
+        fun isPdf(name: String): Boolean =
+            name.substringAfterLast('.', "").lowercase() == "pdf"
         fun isUnsupported(name: String): Boolean =
-            name.substringAfterLast('.', "").lowercase() in setOf("cbr", "rar", "pdf")
+            name.substringAfterLast('.', "").lowercase() in setOf("cbr", "rar")
 
         fun imgExt(name: String): String {
             val ext = name.substringBefore('?').substringAfterLast('.', "").lowercase()

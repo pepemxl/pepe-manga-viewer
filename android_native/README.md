@@ -128,14 +128,14 @@ The **Local** tab imports manga from the device — no server involved. Tap
 **Add folder**, pick a folder via the system file picker (SAF), and it becomes a
 local series:
 
-- each `.cbz` / `.zip` and each image sub-folder is a chapter;
+- each `.cbz` / `.zip`, `.pdf`, and image sub-folder is a chapter;
 - loose images form a single chapter.
 
 Pages are extracted into `<localStorageDir>/_local/<series>/<chapter>/` and read
 through the normal reader — reusing the same `PageRef` + `LocalPageFetcher` path
-as cached online pages (the files already exist, so nothing is downloaded). The
+as cached online pages (the files already exist, so nothing is downloaded). PDFs
+are rendered to JPEGs with the platform `PdfRenderer` (no extra dependency). The
 index is `_local/index.json`. SAF needs no storage permission.
 
-Supported now: **CBZ/ZIP** and **image folders**. `.cbr`/`.pdf` are detected but
-skipped for now (PDF can use the built-in `PdfRenderer`, CBR a RAR library —
-both are easy follow-ups).
+Supported now: **CBZ/ZIP**, **PDF**, and **image folders**. `.cbr`/`.rar` are
+detected but skipped (they'd need a RAR library).
