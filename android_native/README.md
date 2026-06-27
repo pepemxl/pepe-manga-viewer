@@ -67,7 +67,7 @@ your LAN (e.g. `http://192.168.1.20:8202`). Cleartext HTTP to local hosts is
 allowed via `res/xml/network_security_config.xml`.
 
 Verified: `assembleDebug` and `assembleRelease` (R8 + lint-vital) both pass with
-JDK 17, AGP 8.7.3, Gradle 8.11.1, compileSdk 35.
+JDK 17, AGP 8.13.2, Gradle 8.13, compileSdk 35.
 
 ## Release signing
 
