@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("com.github.junrar:junrar:7.5.5")
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

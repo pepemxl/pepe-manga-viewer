@@ -66,8 +66,8 @@ fun LocalScreen(
             PrimaryButton(label = "Add folder", onClick = { picker.launch(null) })
         }
         Text(
-            "Import a folder of .cbz/.zip/.pdf chapters or images. Pages are copied " +
-                "into your local storage and read entirely on-device.",
+            "Import a folder of .cbz/.zip/.cbr/.pdf chapters or images. Pages are " +
+                "copied into your local storage and read entirely on-device.",
             color = c.ink3, fontSize = 13.sp,
         )
         if (busy) Text("importing…", color = c.ink3, fontSize = 12.sp)

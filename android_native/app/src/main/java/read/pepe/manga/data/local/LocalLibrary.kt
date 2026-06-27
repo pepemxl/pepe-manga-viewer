@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import com.github.junrar.Archive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -112,7 +113,13 @@ class LocalLibrary(private val settings: SettingsStore) {
                     val pages = extractPdf(context, child.uri, File(seriesDir, cid))
                     if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages)
                 }
-                isUnsupported(name) -> skipped += name
+                isRar(name) -> {
+                    val stem = name.substringBeforeLast('.')
+                    val cid = LocalImageStore.sanitize(stem)
+                    val pages = runCatching { extractRar(context, child.uri, File(seriesDir, cid), context.cacheDir) }
+                        .getOrElse { emptyList() }
+                    if (pages.isNotEmpty()) chapters += LocalChapter(cid, stem, stem, pages) else skipped += name
+                }
                 isImage(name) -> looseImages += child
             }
         }
@@ -155,6 +162,30 @@ class LocalLibrary(private val settings: SettingsStore) {
                     zip.getInputStream(e).use { input ->
                         File(outDir, fileName).outputStream().use { input.copyTo(it) }
                     }
+                    fileName
+                }
+            }
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /** Extract image entries of a .cbr/.rar (via junrar), sorted by name. */
+    private fun extractRar(context: Context, uri: Uri, outDir: File, cacheDir: File): List<String> {
+        val tmp = File.createTempFile("import", ".rar", cacheDir)
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { input.copyTo(it) }
+            } ?: return emptyList()
+            Archive(tmp).use { archive ->
+                val headers = archive.fileHeaders
+                    .filter { !it.isDirectory && isImage(it.fileName) }
+                    .sortedBy { it.fileName }
+                if (headers.isEmpty()) return emptyList()
+                outDir.mkdirs()
+                return headers.mapIndexed { i, h ->
+                    val fileName = "page_%04d.%s".format(i + 1, imgExt(h.fileName))
+                    File(outDir, fileName).outputStream().use { os -> archive.extractFile(h, os) }
                     fileName
                 }
             }
@@ -218,7 +249,7 @@ class LocalLibrary(private val settings: SettingsStore) {
             name.substringAfterLast('.', "").lowercase() in setOf("cbz", "zip")
         fun isPdf(name: String): Boolean =
             name.substringAfterLast('.', "").lowercase() == "pdf"
-        fun isUnsupported(name: String): Boolean =
+        fun isRar(name: String): Boolean =
             name.substringAfterLast('.', "").lowercase() in setOf("cbr", "rar")
 
         fun imgExt(name: String): String {
