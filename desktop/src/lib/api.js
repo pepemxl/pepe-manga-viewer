@@ -24,19 +24,54 @@ export function pageUrl(chapterId, idx0) {
   return `${BASE}/api/reader/page/${chapterId}/${idx0}`;
 }
 
+// ── offline metadata cache ────────────────────────────────────────────────
+// GET JSON responses are written through to localStorage (keyed by server +
+// path). When the backend is unreachable we serve the last cached copy so the
+// library, series and reader still work offline. Cached page images are handled
+// separately by the Tauri local_storage layer (see lib/cache.js).
+const META_PREFIX = 'pepe-manga.meta:';
+const metaKey = (path) => `${META_PREFIX}${BASE}${path}`;
+
+function cachePut(path, data) {
+  try { localStorage.setItem(metaKey(path), JSON.stringify(data)); } catch { /* quota / disabled */ }
+}
+function cacheGet(path) {
+  try {
+    const raw = localStorage.getItem(metaKey(path));
+    return raw == null ? undefined : JSON.parse(raw);
+  } catch { return undefined; }
+}
+
 async function req(method, path, body) {
   const opts = { method, headers: {} };
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(BASE + path, opts);
+
+  let r;
+  try {
+    r = await fetch(BASE + path, opts);
+  } catch (netErr) {
+    // Backend unreachable — fall back to the last cached GET response, if any.
+    if (method === 'GET') {
+      const cached = cacheGet(path);
+      if (cached !== undefined) return cached;
+    }
+    throw netErr;
+  }
+
   if (!r.ok) {
     const text = await r.text().catch(() => '');
     throw new Error(`${r.status} ${r.statusText} — ${text}`);
   }
   const ct = r.headers.get('content-type') || '';
-  return ct.includes('application/json') ? r.json() : r.text();
+  if (ct.includes('application/json')) {
+    const data = await r.json();
+    if (method === 'GET') cachePut(path, data);
+    return data;
+  }
+  return r.text();
 }
 
 function qs(obj) {

@@ -103,3 +103,21 @@ cp keystore.properties.example keystore.properties   # then edit the values
 `storeFile` may be absolute or relative to `android_native/`. The keystore and
 `keystore.properties` are git-ignored — **never commit them**, and keep a backup
 of the keystore (losing it means you can't ship updates under the same identity).
+
+## Working offline
+
+The reader keeps working when the backend is unreachable:
+
+- **Page images** are cached local-first under
+  `<localStorageDir>/<provider>/<manga>/<chapter>/` — `LocalPageFetcher` serves
+  them from disk and only downloads (write-through) on a miss. Covers come from
+  Coil's 256 MB disk cache, so ones you've seen still render.
+- **Metadata** (library, series, chapter, dashboard) is cached as JSON under
+  `<localStorageDir>/_meta/` by `MetadataCache`. `MangaRepository` is
+  network-first with write-through and falls back to the cached copy on an
+  `IOException` (no connectivity).
+- **Reading progress** posted while offline is queued in `_meta/pending_progress`
+  and replayed automatically on the next successful network call.
+
+The cache root is **Settings → Local storage** (defaults to the app's external
+files dir). Nothing here needs a runtime permission.

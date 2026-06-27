@@ -72,6 +72,22 @@ render in the reader.
 This is a desktop-only feature — the `npm run dev` web preview has no filesystem
 access and always streams from the backend.
 
+## Working offline
+
+The app degrades gracefully when the backend is unreachable:
+
+- **Metadata** (library, series, chapter info, dashboard) is cached: every
+  successful `GET` is written through to the webview's `localStorage`, and when a
+  request can't reach the server the last cached response is served instead. So
+  screens you've opened before still load offline.
+- **Pages** you've already read render from the on-disk cache above. Pages never
+  cached can't be shown while offline.
+- **Writes** (reading progress, per-series reader config) are attempted but fail
+  silently offline; progress resumes syncing once the backend is reachable again.
+
+Covers are streamed from the backend, so uncached covers fall back to the
+generated placeholder while offline.
+
 ## Layout
 
 ```
