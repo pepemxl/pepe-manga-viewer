@@ -93,16 +93,17 @@ generated placeholder while offline.
 The **Local** tab imports manga straight from your machine — no server involved.
 Click **Add folder…**, pick a folder, and it becomes a local series:
 
-- each `.cbz` / `.zip` archive and each image sub-folder inside it is a chapter;
+- each `.cbz` / `.zip` archive, `.pdf` book, and image sub-folder inside it is a chapter;
 - loose images directly in the folder form a single chapter.
 
 Pages are extracted into `<storage root>/_local/<series>/<chapter>/` (so set a
 local storage folder in **Settings** first) and read through the same reader,
-fully offline. The library index lives in the webview's `localStorage`; **Remove**
-deletes both the index entry and the extracted files.
+fully offline. PDFs are rasterized to page images with **pdf.js** in the webview
+(no native library). The library index lives in the webview's `localStorage`;
+**Remove** deletes both the index entry and the extracted files.
 
-Supported now: **CBZ/ZIP** and **image folders**. `.cbr`/`.pdf` are detected but
-skipped (they need extra native libraries on desktop).
+Supported now: **CBZ/ZIP**, **PDF**, and **image folders**. `.cbr`/`.rar` are
+detected but skipped (they need a RAR library).
 
 ## Layout
 

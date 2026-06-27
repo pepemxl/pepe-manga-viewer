@@ -153,12 +153,25 @@ struct LocalChapter {
     pages: Vec<String>,
 }
 
+/// A PDF chapter the Rust side can't rasterize — handed back to the webview,
+/// which renders it with pdf.js and writes the pages via `save_local_page`.
+#[derive(serde::Serialize)]
+struct PdfJob {
+    id: String,
+    title: String,
+    number: String,
+    src: String,
+    out_dir: String,
+}
+
 #[derive(serde::Serialize)]
 struct LocalSeries {
     id: String,
     title: String,
     chapters: Vec<LocalChapter>,
-    /// Sources we couldn't import yet (e.g. .cbr / .pdf on desktop).
+    /// PDF chapters to be rendered by the front-end (pdf.js).
+    pdfs: Vec<PdfJob>,
+    /// Sources we can't import (e.g. .cbr / .rar).
     skipped: Vec<String>,
 }
 
@@ -238,6 +251,7 @@ fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
     entries.sort();
 
     let mut chapters = Vec::new();
+    let mut pdfs = Vec::new();
     let mut skipped = Vec::new();
     let mut loose_images = false;
 
@@ -251,16 +265,26 @@ fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
             }
         } else if entry.is_file() {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+            let stem = name.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| name.clone());
             match ext.as_str() {
                 "cbz" | "zip" => {
-                    let cid = sanitize(name.trim_end_matches(&format!(".{ext}")));
+                    let cid = sanitize(&stem);
                     let pages = extract_zip(entry, &series_dir.join(&cid))?;
                     if !pages.is_empty() {
-                        let stem = name.trim_end_matches(&format!(".{ext}")).to_string();
                         chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
                     }
                 }
-                "cbr" | "rar" | "pdf" => skipped.push(name),
+                "pdf" => {
+                    let cid = sanitize(&stem);
+                    pdfs.push(PdfJob {
+                        id: cid.clone(),
+                        title: stem.clone(),
+                        number: stem,
+                        src: entry.to_string_lossy().into_owned(),
+                        out_dir: series_dir.join(&cid).to_string_lossy().into_owned(),
+                    });
+                }
+                "cbr" | "rar" => skipped.push(name),
                 _ if is_image(&name) => loose_images = true,
                 _ => {}
             }
@@ -276,15 +300,15 @@ fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
         }
     }
 
-    if chapters.is_empty() {
+    if chapters.is_empty() && pdfs.is_empty() {
         return Err(if skipped.is_empty() {
             "No readable images found in that folder.".into()
         } else {
-            format!("Only unsupported files found ({}). CBR/PDF aren't supported on desktop yet.", skipped.join(", "))
+            format!("Only unsupported files found ({}). CBR/RAR aren't supported.", skipped.join(", "))
         });
     }
 
-    Ok(LocalSeries { id: series_id, title, chapters, skipped })
+    Ok(LocalSeries { id: series_id, title, chapters, pdfs, skipped })
 }
 
 /// Import a picked folder as a local series (heavy I/O off the UI thread).
@@ -308,6 +332,27 @@ fn delete_local_series(root: String, series_id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Grant the asset protocol read access to a single file (so pdf.js can load a
+/// PDF that lives outside the storage root).
+#[tauri::command]
+fn allow_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    app.asset_protocol_scope().allow_file(&path).map_err(|e| e.to_string())
+}
+
+/// Write one base64-encoded page image (rendered by pdf.js) into a chapter dir.
+#[tauri::command]
+fn save_local_page(dir: String, name: String, b64: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let d = Path::new(&dir);
+    fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    let out = d.join(&name);
+    fs::write(&out, &bytes).map_err(|e| e.to_string())?;
+    Ok(out.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -319,6 +364,8 @@ pub fn run() {
             cache_page,
             import_local_series,
             delete_local_series,
+            allow_path,
+            save_local_page,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

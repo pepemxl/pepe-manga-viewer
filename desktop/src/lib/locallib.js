@@ -4,8 +4,48 @@
 // pages are read back through Tauri's asset: protocol — no backend involved.
 
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 const LOCAL_KEY = 'pepe-manga.local';
+
+// pdf.js is loaded lazily (kept out of the main bundle) and renders PDF pages
+// in the Chromium webview — no native PDF library needed.
+let _pdfjs = null;
+async function loadPdfjs() {
+  if (_pdfjs) return _pdfjs;
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  _pdfjs = pdfjs;
+  return pdfjs;
+}
+
+/** Render a PDF (handed back by Rust) page-by-page into its chapter folder. */
+async function renderPdfJob(job) {
+  const pdfjs = await loadPdfjs();
+  await invoke('allow_path', { path: job.src }); // let the asset protocol read it
+  const doc = await pdfjs.getDocument({ url: convertFileSrc(job.src) }).promise;
+  const pages = [];
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const viewport = page.getViewport({ scale: 2 }); // ~150 dpi
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; // PDFs assume a white page
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const b64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      const name = `page_${String(i).padStart(4, '0')}.jpg`;
+      pages.push(await invoke('save_local_page', { dir: job.out_dir, name, b64 }));
+      page.cleanup?.();
+    }
+  } finally {
+    doc.destroy?.();
+  }
+  return pages;
+}
 
 export function isDesktop() {
   try { return isTauri(); } catch { return false; }
@@ -76,11 +116,18 @@ export async function importLocalFolder(storageRoot) {
   const dir = await open({ directory: true, multiple: false, title: 'Choose a folder to import' });
   if (typeof dir !== 'string' || !dir) return null;
 
-  const series = await invoke('import_local_series', { root: storageRoot, path: dir });
-  // Persist a compact index entry (keep page paths for the reader).
-  const list = loadIndex().filter((s) => s.id !== series.id); // replace on re-import
-  list.unshift(series);
-  saveIndex(list);
+  const raw = await invoke('import_local_series', { root: storageRoot, path: dir });
+
+  // Rust extracted zip/folder chapters; render any PDF chapters here with pdf.js.
+  const chapters = [...raw.chapters];
+  for (const job of (raw.pdfs || [])) {
+    const pages = await renderPdfJob(job);
+    if (pages.length) chapters.push({ id: job.id, title: job.title, number: job.number, pages });
+  }
+  chapters.sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+
+  const series = { id: raw.id, title: raw.title, chapters, skipped: raw.skipped || [] };
+  saveIndex([series, ...loadIndex().filter((s) => s.id !== series.id)]); // replace on re-import
   return series;
 }
 
