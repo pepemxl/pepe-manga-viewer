@@ -50,8 +50,8 @@ export default function Local() {
         <PrimaryButton label="Add folder…" glyph="＋" onClick={addFolder} />
       </div>
       <p style={{ color: 'var(--ink-3)', margin: 0 }}>
-        Import a folder of <Mono size={12}>.cbz/.zip/.pdf</Mono> chapters or images.
-        Pages are extracted into your local storage folder and read entirely offline.
+        Import a folder of <Mono size={12}>.cbz/.zip/.cbr/.pdf</Mono> chapters or
+        images. Pages are extracted into your local storage folder and read entirely offline.
       </p>
       {(busy || msg) && (
         <Mono size={12} color="var(--ink-3)">{busy ? 'importing…' : msg}</Mono>

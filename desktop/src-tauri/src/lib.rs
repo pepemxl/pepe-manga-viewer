@@ -213,6 +213,47 @@ fn extract_zip(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
     Ok(pages)
 }
 
+/// Extract image entries of a .cbr/.rar into `out_dir` as page_0001.ext, sorted by name.
+fn extract_rar(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
+    use unrar::Archive;
+
+    // First pass: list image entry names, sorted, to assign page order.
+    let mut names: Vec<String> = Vec::new();
+    let listing = Archive::new(src).open_for_listing().map_err(|e| e.to_string())?;
+    for entry in listing {
+        let header = entry.map_err(|e| e.to_string())?;
+        if header.is_file() {
+            let name = header.filename.to_string_lossy().into_owned();
+            if is_image(&name) {
+                names.push(name);
+            }
+        }
+    }
+    names.sort();
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    let order: std::collections::HashMap<String, usize> =
+        names.iter().enumerate().map(|(i, n)| (n.clone(), i)).collect();
+    let mut pages = vec![String::new(); names.len()];
+
+    // Second pass: extract image entries to their page slots, skip the rest.
+    let mut archive = Archive::new(src).open_for_processing().map_err(|e| e.to_string())?;
+    while let Some(header) = archive.read_header().map_err(|e| e.to_string())? {
+        let name = header.entry().filename.to_string_lossy().into_owned();
+        archive = if let Some(&idx) = order.get(&name) {
+            let out = out_dir.join(format!("page_{:04}.{}", idx + 1, img_ext(&name)));
+            let next = header.extract_to(&out).map_err(|e| e.to_string())?;
+            pages[idx] = out.to_string_lossy().into_owned();
+            next
+        } else {
+            header.skip().map_err(|e| e.to_string())?
+        };
+    }
+    Ok(pages.into_iter().filter(|p| !p.is_empty()).collect())
+}
+
 /// Copy image files from a directory into `out_dir` as page_0001.ext, sorted by name.
 fn copy_image_dir(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
     let mut names: Vec<String> = fs::read_dir(src)
@@ -284,7 +325,15 @@ fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
                         out_dir: series_dir.join(&cid).to_string_lossy().into_owned(),
                     });
                 }
-                "cbr" | "rar" => skipped.push(name),
+                "cbr" | "rar" => {
+                    let cid = sanitize(&stem);
+                    match extract_rar(entry, &series_dir.join(&cid)) {
+                        Ok(pages) if !pages.is_empty() => {
+                            chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
+                        }
+                        _ => skipped.push(name),
+                    }
+                }
                 _ if is_image(&name) => loose_images = true,
                 _ => {}
             }
@@ -304,7 +353,7 @@ fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
         return Err(if skipped.is_empty() {
             "No readable images found in that folder.".into()
         } else {
-            format!("Only unsupported files found ({}). CBR/RAR aren't supported.", skipped.join(", "))
+            format!("Couldn't read any pages from: {}.", skipped.join(", "))
         });
     }
 
