@@ -138,6 +138,176 @@ async fn cache_page(
     Ok(path.to_string_lossy().into_owned())
 }
 
+// ── local library import ────────────────────────────────────────────────────
+// A picked folder becomes a local-only series. Each `.cbz`/`.zip` archive and
+// each image sub-folder inside it is a chapter; loose images directly in the
+// folder form a single chapter. Pages are extracted/copied into
+// `<root>/_local/<series_id>/<chapter_id>/page_XXXX.ext` so local content lives
+// alongside the cache and reuses the same `asset:`-protocol reader path.
+
+#[derive(serde::Serialize)]
+struct LocalChapter {
+    id: String,
+    title: String,
+    number: String,
+    pages: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct LocalSeries {
+    id: String,
+    title: String,
+    chapters: Vec<LocalChapter>,
+    /// Sources we couldn't import yet (e.g. .cbr / .pdf on desktop).
+    skipped: Vec<String>,
+}
+
+fn is_image(name: &str) -> bool {
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif" | "bmp" | "avif")
+}
+
+fn img_ext(name: &str) -> String {
+    let ext = name.rsplit('.').next().unwrap_or("jpg").to_ascii_lowercase();
+    if ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphanumeric()) { ext } else { "jpg".into() }
+}
+
+fn short_hash(s: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    format!("{:08x}", h.finish() as u32)
+}
+
+/// Extract image entries of a zip/cbz into `out_dir` as page_0001.ext, sorted by name.
+fn extract_zip(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
+    let file = fs::File::open(src).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let mut names: Vec<String> = (0..zip.len())
+        .filter_map(|i| zip.by_index(i).ok().filter(|f| f.is_file()).map(|f| f.name().to_string()))
+        .filter(|n| is_image(n))
+        .collect();
+    names.sort();
+    fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    let mut pages = Vec::new();
+    for (idx, name) in names.iter().enumerate() {
+        let mut entry = zip.by_name(name).map_err(|e| e.to_string())?;
+        let out = out_dir.join(format!("page_{:04}.{}", idx + 1, img_ext(name)));
+        let mut w = fs::File::create(&out).map_err(|e| e.to_string())?;
+        std::io::copy(&mut entry, &mut w).map_err(|e| e.to_string())?;
+        pages.push(out.to_string_lossy().into_owned());
+    }
+    Ok(pages)
+}
+
+/// Copy image files from a directory into `out_dir` as page_0001.ext, sorted by name.
+fn copy_image_dir(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = fs::read_dir(src)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| is_image(n))
+        .collect();
+    names.sort();
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    let mut pages = Vec::new();
+    for (idx, name) in names.iter().enumerate() {
+        let out = out_dir.join(format!("page_{:04}.{}", idx + 1, img_ext(name)));
+        fs::copy(src.join(name), &out).map_err(|e| e.to_string())?;
+        pages.push(out.to_string_lossy().into_owned());
+    }
+    Ok(pages)
+}
+
+fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
+    let src = Path::new(path);
+    let title = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Local".into());
+    let series_id = format!("{}-{}", sanitize(&title), short_hash(path));
+    let series_dir = Path::new(root).join("_local").join(&series_id);
+
+    // Gather candidate chapter sources: archives, image sub-folders, and loose images.
+    let mut entries: Vec<PathBuf> = fs::read_dir(src)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    entries.sort();
+
+    let mut chapters = Vec::new();
+    let mut skipped = Vec::new();
+    let mut loose_images = false;
+
+    for entry in &entries {
+        let name = entry.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if entry.is_dir() {
+            let cid = sanitize(&name);
+            let pages = copy_image_dir(entry, &series_dir.join(&cid))?;
+            if !pages.is_empty() {
+                chapters.push(LocalChapter { id: cid, title: name.clone(), number: name, pages });
+            }
+        } else if entry.is_file() {
+            let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+            match ext.as_str() {
+                "cbz" | "zip" => {
+                    let cid = sanitize(name.trim_end_matches(&format!(".{ext}")));
+                    let pages = extract_zip(entry, &series_dir.join(&cid))?;
+                    if !pages.is_empty() {
+                        let stem = name.trim_end_matches(&format!(".{ext}")).to_string();
+                        chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
+                    }
+                }
+                "cbr" | "rar" | "pdf" => skipped.push(name),
+                _ if is_image(&name) => loose_images = true,
+                _ => {}
+            }
+        }
+    }
+
+    // Loose images directly in the folder → one chapter named after the folder.
+    if loose_images {
+        let cid = "chapter".to_string();
+        let pages = copy_image_dir(src, &series_dir.join(&cid))?;
+        if !pages.is_empty() {
+            chapters.push(LocalChapter { id: cid, title: title.clone(), number: "1".into(), pages });
+        }
+    }
+
+    if chapters.is_empty() {
+        return Err(if skipped.is_empty() {
+            "No readable images found in that folder.".into()
+        } else {
+            format!("Only unsupported files found ({}). CBR/PDF aren't supported on desktop yet.", skipped.join(", "))
+        });
+    }
+
+    Ok(LocalSeries { id: series_id, title, chapters, skipped })
+}
+
+/// Import a picked folder as a local series (heavy I/O off the UI thread).
+#[tauri::command]
+async fn import_local_series(root: String, path: String) -> Result<LocalSeries, String> {
+    if root.trim().is_empty() {
+        return Err("storage root not set".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || import_blocking(&root, &path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Delete a local series' extracted files. Best-effort.
+#[tauri::command]
+fn delete_local_series(root: String, series_id: String) -> Result<(), String> {
+    let dir = Path::new(&root).join("_local").join(sanitize(&series_id));
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -147,6 +317,8 @@ pub fn run() {
             allow_storage,
             cached_page,
             cache_page,
+            import_local_series,
+            delete_local_series,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { IconBox, Mono, SectionLabel, Segmented } from '../components/ui.jsx';
 import { api, pageUrl } from '../lib/api.js';
 import { cachedPageSrc, chapterFolder, ensureCached, isDesktop } from '../lib/cache.js';
+import { getLocalChapter, localChapterPageUrls, parseLocalReadId } from '../lib/locallib.js';
 import { DIRECTIONS, FITS, MODES, isContinuous, normalizeDir } from '../lib/reader.js';
 import { useSettings } from '../lib/settings.jsx';
 
@@ -97,10 +98,37 @@ export default function Reader() {
   const progTimer = useRef(null);
   const toastTimer = useRef(null);
 
+  // Local-library chapters (`local:<sid>:<cid>`) are read straight off disk —
+  // no backend, no progress/config/neighbors.
+  const local = parseLocalReadId(chId);
+  const isLocal = !!local;
+  const [localPages, setLocalPages] = useState(null);
+
   // ── load chapter (+ neighbors), then resolve mode/dir/fit ──────────────
   useEffect(() => {
     let cancel = false;
     setCh(null);
+    setLocalPages(null);
+
+    if (isLocal) {
+      const found = getLocalChapter(local.seriesId, local.chapterId);
+      if (!found) { setToast('Local chapter not found'); return undefined; }
+      const { series, chapter } = found;
+      const synth = {
+        id: chId, series_id: series.id, series_title: series.title,
+        number: chapter.number, title: chapter.title,
+        page_count: (chapter.pages || []).length || 1,
+      };
+      setCh(synth);
+      setLocalPages(localChapterPageUrls(chapter));
+      setPage(Math.max(1, Math.min(startPage, synth.page_count)));
+      setMode(settings.defaultMode || 'single');
+      setDir(settings.defaultDirection || 'RTL');
+      setFit(settings.defaultFit || 'height');
+      setZoom(1);
+      return undefined;
+    }
+
     (async () => {
       const info = await api.readerChapter(chId);
       if (cancel) return;
@@ -127,7 +155,7 @@ export default function Reader() {
 
   // ── persist per-series reader config (debounced; skip first post-load) ──
   useEffect(() => {
-    if (!ch) return;
+    if (!ch || isLocal) return;
     if (skipCfgSave.current) { skipCfgSave.current = false; return; }
     clearTimeout(cfgTimer.current);
     cfgTimer.current = setTimeout(() => {
@@ -138,7 +166,7 @@ export default function Reader() {
 
   // ── report progress (debounced) ────────────────────────────────────────
   useEffect(() => {
-    if (!ch) return;
+    if (!ch || isLocal) return;
     clearTimeout(progTimer.current);
     progTimer.current = setTimeout(() => {
       api.progress(ch.id, page, page >= ch.page_count).catch(() => {});
@@ -157,6 +185,7 @@ export default function Reader() {
   useEffect(() => { if (panel) { setChrome(true); clearTimeout(idle.current); } }, [panel]);
 
   const total = ch?.page_count || 1;
+  const backTo = ch ? (isLocal ? `/local/${encodeURIComponent(ch.series_id)}` : `/series/${ch.series_id}`) : '/';
 
   const goTo = useCallback((p) => {
     setPage((cur) => {
@@ -207,7 +236,7 @@ export default function Reader() {
         case 'ArrowLeft':  e.preventDefault(); e.shiftKey ? goChapter(-1) : advance(rtl ? 1 : -1); break;
         case 'ArrowRight': e.preventDefault(); e.shiftKey ? goChapter(1)  : advance(rtl ? -1 : 1); break;
         case ' ':          e.preventDefault(); advance(1); break;
-        case 'Escape':     nav(ch ? `/series/${ch.series_id}` : '/'); break;
+        case 'Escape':     nav(backTo); break;
         case 'm': case 'M': setMode((m) => MODES[(MODES.findIndex((x) => x.key === m) + 1) % MODES.length].key); break;
         case 'f': case 'F':
           if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
@@ -224,9 +253,10 @@ export default function Reader() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('mousemove', onMove);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousemove', onMove); };
-  }, [advance, goChapter, dir, ch, nav, bump, changeZoom]);
+  }, [advance, goChapter, dir, ch, nav, bump, changeZoom, backTo]);
 
-  const pages = usePageSrcs(ch, settings.storageRoot);
+  const fetchedPages = usePageSrcs(isLocal ? null : ch, settings.storageRoot);
+  const pages = isLocal ? (localPages || []) : fetchedPages;
 
   if (!ch) {
     return <div className="reader"><div className="state">loading chapter…</div></div>;
@@ -255,7 +285,7 @@ export default function Reader() {
 
       {/* top chrome */}
       <div className="chrome top">
-        <IconBox glyph="←" title="Back" onClick={() => nav(`/series/${ch.series_id}`)} />
+        <IconBox glyph="←" title="Back" onClick={() => nav(backTo)} />
         <div className="col" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {ch.title || `Chapter ${ch.number}`}

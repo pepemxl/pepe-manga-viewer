@@ -51,8 +51,45 @@ class ReaderViewModel(
 
     private var progressJob: Job? = null
     private var viewInitialised = false
+    private var isLocal = false
+
+    /** Load a local-only chapter (no backend, no progress reporting). */
+    fun loadLocal(seriesId: String, chapterId: String, startPage: Int) {
+        isLocal = true
+        _data.value = Loadable.Loading
+        viewModelScope.launch {
+            runCatching {
+                val series = ServiceLocator.localLibrary.get(seriesId)
+                    ?: error("Local series not found")
+                val chapter = series.chapters.find { it.id == chapterId }
+                    ?: error("Local chapter not found")
+                val pages = chapter.pages.map { fileName ->
+                    PageRef(
+                        url = "",
+                        provider = LocalImageStore.LOCAL_PROVIDER,
+                        manga = series.id,
+                        chapter = chapter.id,
+                        fileName = fileName,
+                    )
+                }
+                val dto = ReaderChapterDto(
+                    id = 0,
+                    seriesId = 0,
+                    number = chapter.number,
+                    title = chapter.title,
+                    pageCount = pages.size,
+                )
+                ReaderData(dto, pages, neighbors = null)
+            }.onSuccess { d ->
+                _data.value = Loadable.Success(d)
+                _page.value = startPage.coerceIn(1, d.chapter.pageCount.coerceAtLeast(1))
+                if (!viewInitialised) { initView(d.chapter); viewInitialised = true }
+            }.onFailure { _data.value = Loadable.Error(it.toMessage()) }
+        }
+    }
 
     fun load(chapterId: Int, startPage: Int) {
+        isLocal = false
         _data.value = Loadable.Loading
         viewModelScope.launch {
             runCatching {
@@ -122,6 +159,7 @@ class ReaderViewModel(
     fun atEnd(): Boolean = _page.value >= totalPages
 
     private fun reportProgress(page: Int, finished: Boolean) {
+        if (isLocal) return // local-only content has no backend to sync to
         val id = chapterId ?: return
         progressJob?.cancel()
         progressJob = viewModelScope.launch {

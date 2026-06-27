@@ -31,6 +31,9 @@ object LocalImageStore {
     /** Provider folder for the current FastAPI backend. */
     const val PROVIDER = "pepe_manga_server"
 
+    /** Provider folder for imported local-only content (`<root>/_local/...`). */
+    const val LOCAL_PROVIDER = "_local"
+
     /** `<root>/<provider>/<manga>/<chapter>/<fileName>`, each segment sanitized. */
     fun fileFor(root: String, ref: PageRef): File =
         File(root)
@@ -49,7 +52,7 @@ object LocalImageStore {
     }
 
     /** Strip characters that are illegal in file names across platforms. */
-    private fun sanitize(raw: String): String {
+    fun sanitize(raw: String): String {
         val cleaned = raw.trim().map { ch ->
             if (ch.isLetterOrDigit() || ch in "._- ") ch else '_'
         }.joinToString("").trim(' ', '.')

@@ -28,6 +28,8 @@ import androidx.navigation.navArgument
 import read.pepe.manga.ui.components.RailButton
 import read.pepe.manga.ui.dashboard.DashboardScreen
 import read.pepe.manga.ui.library.LibraryScreen
+import read.pepe.manga.ui.local.LocalScreen
+import read.pepe.manga.ui.local.LocalSeriesScreen
 import read.pepe.manga.ui.misc.AddScreen
 import read.pepe.manga.ui.nav.BookGlyph
 import read.pepe.manga.ui.nav.Routes
@@ -42,7 +44,7 @@ fun MangaAppRoot() {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val immersive = route == Routes.READER // reader hides the rail
+    val immersive = route == Routes.READER || route == Routes.LOCAL_READER // reader hides the rail
 
     Row(Modifier.fillMaxSize()) {
         if (!immersive) {
@@ -74,6 +76,40 @@ fun MangaAppRoot() {
             }
             composable(Routes.ADD) { AddScreen() }
             composable(Routes.SETTINGS) { SettingsScreen() }
+
+            composable(Routes.LOCAL) {
+                LocalScreen(onOpenSeries = { nav.navigate(Routes.localSeries(it)) })
+            }
+            composable(
+                Routes.LOCAL_SERIES,
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: return@composable
+                LocalSeriesScreen(
+                    seriesId = id,
+                    onBack = { nav.popBackStack() },
+                    onRead = { sid, cid -> nav.navigate(Routes.localReader(sid, cid)) },
+                )
+            }
+            composable(
+                Routes.LOCAL_READER,
+                arguments = listOf(
+                    navArgument("seriesId") { type = NavType.StringType },
+                    navArgument("chapterId") { type = NavType.StringType },
+                    navArgument("page") { type = NavType.IntType; defaultValue = 1 },
+                ),
+            ) { entry ->
+                val sid = entry.arguments?.getString("seriesId") ?: return@composable
+                val cid = entry.arguments?.getString("chapterId") ?: return@composable
+                val page = entry.arguments?.getInt("page") ?: 1
+                ReaderScreen(
+                    chapterId = 0,
+                    startPage = page,
+                    onExit = { nav.popBackStack() },
+                    localSeriesId = sid,
+                    localChapterId = cid,
+                )
+            }
 
             composable(
                 Routes.SERIES,

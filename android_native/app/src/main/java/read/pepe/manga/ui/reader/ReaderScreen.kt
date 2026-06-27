@@ -72,14 +72,25 @@ fun ReaderScreen(
     startPage: Int,
     onExit: () -> Unit,
     vm: ReaderViewModel = viewModel(),
+    localSeriesId: String? = null,
+    localChapterId: String? = null,
 ) {
-    LaunchedEffect(chapterId) { vm.load(chapterId, startPage) }
+    val isLocal = localSeriesId != null && localChapterId != null
+    LaunchedEffect(chapterId, localSeriesId, localChapterId) {
+        if (isLocal) vm.loadLocal(localSeriesId!!, localChapterId!!, startPage)
+        else vm.load(chapterId, startPage)
+    }
     val state by vm.data.collectAsStateWithLifecycle()
     val c = AppTheming.colors
 
+    val retry: () -> Unit = {
+        if (isLocal) vm.loadLocal(localSeriesId!!, localChapterId!!, startPage)
+        else vm.load(chapterId, startPage)
+    }
     Box(Modifier.fillMaxSize().background(c.bgElevated)) {
-        StateHost(state = state, onRetry = { vm.load(chapterId, startPage) }, modifier = Modifier.fillMaxSize()) { data ->
-            ReaderContent(data = data, vm = vm, onExit = onExit, onChangeChapter = { vm.load(it, 1) })
+        StateHost(state = state, onRetry = retry, modifier = Modifier.fillMaxSize()) { data ->
+            // Local content has no chapter neighbors, so onChangeChapter is a no-op there.
+            ReaderContent(data = data, vm = vm, onExit = onExit, onChangeChapter = { if (!isLocal) vm.load(it, 1) })
         }
     }
 }

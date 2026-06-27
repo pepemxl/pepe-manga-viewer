@@ -88,6 +88,22 @@ The app degrades gracefully when the backend is unreachable:
 Covers are streamed from the backend, so uncached covers fall back to the
 generated placeholder while offline.
 
+## Local library (no backend)
+
+The **Local** tab imports manga straight from your machine — no server involved.
+Click **Add folder…**, pick a folder, and it becomes a local series:
+
+- each `.cbz` / `.zip` archive and each image sub-folder inside it is a chapter;
+- loose images directly in the folder form a single chapter.
+
+Pages are extracted into `<storage root>/_local/<series>/<chapter>/` (so set a
+local storage folder in **Settings** first) and read through the same reader,
+fully offline. The library index lives in the webview's `localStorage`; **Remove**
+deletes both the index entry and the extracted files.
+
+Supported now: **CBZ/ZIP** and **image folders**. `.cbr`/`.pdf` are detected but
+skipped (they need extra native libraries on desktop).
+
 ## Layout
 
 ```
