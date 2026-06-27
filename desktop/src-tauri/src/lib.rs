@@ -411,6 +411,14 @@ fn allow_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
     app.asset_protocol_scope().allow_file(&path).map_err(|e| e.to_string())
 }
 
+/// Read a file's raw bytes (used to hand a local PDF to pdf.js as `data`, which
+/// avoids the worker having to fetch it over the asset protocol).
+#[tauri::command]
+fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Write one base64-encoded page image (rendered by pdf.js) into a chapter dir.
 #[tauri::command]
 fn save_local_page(dir: String, name: String, b64: String) -> Result<String, String> {
@@ -438,6 +446,7 @@ pub fn run() {
             delete_local_series,
             allow_path,
             save_local_page,
+            read_file_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

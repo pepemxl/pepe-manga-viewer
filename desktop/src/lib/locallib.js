@@ -4,7 +4,9 @@
 // pages are read back through Tauri's asset: protocol — no backend involved.
 
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// `?worker` lets Vite bundle the pdf.js worker as a real Worker — far more
+// reliable inside the Tauri webview than pointing workerSrc at a URL.
+import PdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker';
 
 const LOCAL_KEY = 'pepe-manga.local';
 
@@ -14,19 +16,22 @@ let _pdfjs = null;
 async function loadPdfjs() {
   if (_pdfjs) return _pdfjs;
   const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  pdfjs.GlobalWorkerOptions.workerPort = new PdfjsWorker();
   _pdfjs = pdfjs;
   return pdfjs;
 }
 
 /** Render a PDF (handed back by Rust) page-by-page into its chapter folder. */
-async function renderPdfJob(job) {
+async function renderPdfJob(job, onProgress) {
   const pdfjs = await loadPdfjs();
-  await invoke('allow_path', { path: job.src }); // let the asset protocol read it
-  const doc = await pdfjs.getDocument({ url: convertFileSrc(job.src) }).promise;
+  // Read the bytes via Rust and feed them to pdf.js directly — no asset-protocol
+  // fetch from the worker (which can silently hang in the webview).
+  const buf = await invoke('read_file_bytes', { path: job.src });
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
   const pages = [];
   try {
     for (let i = 1; i <= doc.numPages; i++) {
+      onProgress?.(job.title, i, doc.numPages);
       const page = await doc.getPage(i);
       const viewport = page.getViewport({ scale: 2 }); // ~150 dpi
       const canvas = document.createElement('canvas');
@@ -108,7 +113,7 @@ export function parseLocalReadId(chId) {
  * Open the folder picker, import the chosen folder as a local series (extracting
  * pages into local_storage), persist it to the index, and return the new series.
  */
-export async function importLocalFolder(storageRoot) {
+export async function importLocalFolder(storageRoot, onProgress) {
   if (!isDesktop()) throw new Error('Local import is only available in the desktop app.');
   if (!storageRoot) throw new Error('Set a local storage folder in Settings first.');
 
@@ -118,13 +123,21 @@ export async function importLocalFolder(storageRoot) {
 
   const raw = await invoke('import_local_series', { root: storageRoot, path: dir });
 
-  // Rust extracted zip/folder chapters; render any PDF chapters here with pdf.js.
+  // Rust extracted zip/folder/cbr chapters; render any PDF chapters here with pdf.js.
   const chapters = [...raw.chapters];
   for (const job of (raw.pdfs || [])) {
-    const pages = await renderPdfJob(job);
-    if (pages.length) chapters.push({ id: job.id, title: job.title, number: job.number, pages });
+    try {
+      const pages = await renderPdfJob(job, onProgress);
+      if (pages.length) chapters.push({ id: job.id, title: job.title, number: job.number, pages });
+    } catch (e) {
+      console.error('PDF import failed:', job.title, e); // one bad PDF shouldn't abort the rest
+    }
   }
   chapters.sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+
+  if (chapters.length === 0) {
+    throw new Error('Could not read any pages (PDF rendering may have failed). See the dev console for details.');
+  }
 
   const series = { id: raw.id, title: raw.title, chapters, skipped: raw.skipped || [] };
   saveIndex([series, ...loadIndex().filter((s) => s.id !== series.id)]); // replace on re-import

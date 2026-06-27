@@ -12,23 +12,25 @@ export default function Local() {
   const { settings } = useSettings();
   const [series, setSeries] = useState(listLocal());
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const [msg, setMsg] = useState('');
 
   const refresh = useCallback(() => setSeries(listLocal()), []);
   useEffect(() => { refresh(); }, [refresh]);
 
   async function addFolder() {
-    setBusy(true); setMsg('');
+    setBusy(true); setMsg(''); setProgress('');
     try {
-      const s = await importLocalFolder(settings.storageRoot);
+      const onProgress = (title, page, total) => setProgress(`Rendering ${title}: ${page}/${total}`);
+      const s = await importLocalFolder(settings.storageRoot, onProgress);
       if (s) {
         refresh();
-        const extra = s.skipped?.length ? ` (${s.skipped.length} unsupported skipped)` : '';
+        const extra = s.skipped?.length ? ` (${s.skipped.length} unreadable skipped)` : '';
         setMsg(`Imported “${s.title}” — ${s.chapters.length} chapter(s)${extra}.`);
       }
     } catch (e) {
       setMsg(String(e.message || e));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setProgress(''); }
   }
 
   if (!isDesktop()) {
@@ -54,7 +56,7 @@ export default function Local() {
         images. Pages are extracted into your local storage folder and read entirely offline.
       </p>
       {(busy || msg) && (
-        <Mono size={12} color="var(--ink-3)">{busy ? 'importing…' : msg}</Mono>
+        <Mono size={12} color="var(--ink-3)">{busy ? (progress || 'importing…') : msg}</Mono>
       )}
 
       {series.length === 0 ? (
