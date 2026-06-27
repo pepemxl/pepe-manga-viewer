@@ -277,81 +277,104 @@ fn copy_image_dir(src: &Path, out_dir: &Path) -> Result<Vec<String>, String> {
     Ok(pages)
 }
 
-fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
-    let src = Path::new(path);
-    let title = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Local".into());
-    let series_id = format!("{}-{}", sanitize(&title), short_hash(path));
-    let series_dir = Path::new(root).join("_local").join(&series_id);
+/// Stable chapter id/label from a path relative to the picked folder, so files
+/// with the same name in different sub-folders don't collide.
+fn rel_id(path: &Path, root: &Path, drop_ext: bool) -> String {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    let rel = if drop_ext { rel.with_extension("") } else { rel.to_path_buf() };
+    let cleaned = sanitize(&rel.to_string_lossy());
+    if cleaned.is_empty() { "chapter".to_string() } else { cleaned }
+}
 
-    // Gather candidate chapter sources: archives, image sub-folders, and loose images.
-    let mut entries: Vec<PathBuf> = fs::read_dir(src)
+/// Recursively scan `dir` for chapters: a folder of images is one chapter; each
+/// archive / PDF (at any depth) is a chapter. This handles both a flat folder of
+/// books and one with a sub-folder per book.
+#[allow(clippy::too_many_arguments)]
+fn collect_dir(
+    dir: &Path,
+    root: &Path,
+    series_dir: &Path,
+    depth: u32,
+    chapters: &mut Vec<LocalChapter>,
+    pdfs: &mut Vec<PdfJob>,
+    skipped: &mut Vec<String>,
+) -> Result<(), String> {
+    if depth > 8 {
+        return Ok(());
+    }
+    let mut entries: Vec<PathBuf> = fs::read_dir(dir)
         .map_err(|e| e.to_string())?
         .flatten()
         .map(|e| e.path())
         .collect();
     entries.sort();
 
-    let mut chapters = Vec::new();
-    let mut pdfs = Vec::new();
-    let mut skipped = Vec::new();
-    let mut loose_images = false;
+    // A directory that directly holds images is itself a single chapter.
+    let has_images = entries.iter().any(|e| {
+        e.is_file() && is_image(&e.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+    });
+    if has_images {
+        let cid = rel_id(dir, root, false);
+        let title = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "chapter".into());
+        let pages = copy_image_dir(dir, &series_dir.join(&cid))?;
+        if !pages.is_empty() {
+            chapters.push(LocalChapter { id: cid, title: title.clone(), number: title, pages });
+        }
+        return Ok(());
+    }
 
     for entry in &entries {
         let name = entry.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         if entry.is_dir() {
-            let cid = sanitize(&name);
-            let pages = copy_image_dir(entry, &series_dir.join(&cid))?;
-            if !pages.is_empty() {
-                chapters.push(LocalChapter { id: cid, title: name.clone(), number: name, pages });
-            }
+            collect_dir(entry, root, series_dir, depth + 1, chapters, pdfs, skipped)?;
         } else if entry.is_file() {
             let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
             let stem = name.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| name.clone());
+            let cid = rel_id(entry, root, true);
             match ext.as_str() {
                 "cbz" | "zip" => {
-                    let cid = sanitize(&stem);
                     let pages = extract_zip(entry, &series_dir.join(&cid))?;
                     if !pages.is_empty() {
                         chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
                     }
                 }
-                "pdf" => {
-                    let cid = sanitize(&stem);
-                    pdfs.push(PdfJob {
-                        id: cid.clone(),
-                        title: stem.clone(),
-                        number: stem,
-                        src: entry.to_string_lossy().into_owned(),
-                        out_dir: series_dir.join(&cid).to_string_lossy().into_owned(),
-                    });
-                }
-                "cbr" | "rar" => {
-                    let cid = sanitize(&stem);
-                    match extract_rar(entry, &series_dir.join(&cid)) {
-                        Ok(pages) if !pages.is_empty() => {
-                            chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
-                        }
-                        _ => skipped.push(name),
+                "cbr" | "rar" => match extract_rar(entry, &series_dir.join(&cid)) {
+                    Ok(pages) if !pages.is_empty() => {
+                        chapters.push(LocalChapter { id: cid, title: stem.clone(), number: stem, pages });
                     }
-                }
-                _ if is_image(&name) => loose_images = true,
+                    _ => skipped.push(name),
+                },
+                "pdf" => pdfs.push(PdfJob {
+                    id: cid.clone(),
+                    title: stem.clone(),
+                    number: stem,
+                    src: entry.to_string_lossy().into_owned(),
+                    out_dir: series_dir.join(&cid).to_string_lossy().into_owned(),
+                }),
                 _ => {}
             }
         }
     }
+    Ok(())
+}
 
-    // Loose images directly in the folder → one chapter named after the folder.
-    if loose_images {
-        let cid = "chapter".to_string();
-        let pages = copy_image_dir(src, &series_dir.join(&cid))?;
-        if !pages.is_empty() {
-            chapters.push(LocalChapter { id: cid, title: title.clone(), number: "1".into(), pages });
-        }
-    }
+fn import_blocking(root: &str, path: &str) -> Result<LocalSeries, String> {
+    let src = Path::new(path);
+    let title = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Local".into());
+    let series_id = format!("{}-{}", sanitize(&title), short_hash(path));
+    let series_dir = Path::new(root).join("_local").join(&series_id);
+
+    let mut chapters = Vec::new();
+    let mut pdfs = Vec::new();
+    let mut skipped = Vec::new();
+    collect_dir(src, src, &series_dir, 0, &mut chapters, &mut pdfs, &mut skipped)?;
+
+    // Stable, human order across chapters and pdfs.
+    chapters.sort_by(|a, b| a.number.cmp(&b.number));
 
     if chapters.is_empty() && pdfs.is_empty() {
         return Err(if skipped.is_empty() {
-            "No readable images found in that folder.".into()
+            "No readable books or images found in that folder (looked for .cbz/.zip/.cbr/.rar/.pdf and image folders).".into()
         } else {
             format!("Couldn't read any pages from: {}.", skipped.join(", "))
         });
